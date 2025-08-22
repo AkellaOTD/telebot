@@ -28,9 +28,8 @@ from aiogram.types import (
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from PIL import Image
 from dotenv import load_dotenv
-from telegram import Bot
-from telegram.constants import ParseMode  # if needed
-from telegram.bot import DefaultBotProperties
+from telegram import Bot, DefaultBotProperties
+from telegram.constants import ParseMode
 
 # =========================
 # Конфіг
