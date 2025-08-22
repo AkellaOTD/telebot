@@ -1,5 +1,6 @@
 import os
 import asyncio
+import threading
 from flask import Flask, request, abort
 from aiogram import Bot, Dispatcher
 from aiogram.types import Update
@@ -9,7 +10,7 @@ load_dotenv()
 
 TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_PATH = os.getenv("WEBHOOK_PATH", "/webhook")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # https://yourdomain.com/webhook
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # наприклад: https://yourdomain.com
 
 app = Flask(__name__)
 
@@ -17,7 +18,7 @@ bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
 
-# 👉 тут реєструєш свої хендлери
+# === Приклад простого хендлера ===
 @dp.message()
 async def echo_handler(message):
     await message.answer(f"Echo: {message.text}")
@@ -34,22 +35,24 @@ async def webhook():
 
 
 async def on_startup():
-    # встановлюємо webhook у Telegram
-    await bot.set_webhook(WEBHOOK_URL + WEBHOOK_PATH)
+    """Викликається при старті, реєструє webhook у Telegram"""
+    if WEBHOOK_URL:
+        full_url = WEBHOOK_URL.rstrip("/") + WEBHOOK_PATH
+        await bot.set_webhook(full_url)
+        print(f"✅ Webhook встановлено: {full_url}")
 
 
 async def on_shutdown():
     await bot.delete_webhook()
     await bot.session.close()
+    print("🛑 Webhook видалено, сесія закрита.")
 
 
 if __name__ == "__main__":
-    import threading
-
     loop = asyncio.get_event_loop()
     loop.run_until_complete(on_startup())
 
-    # Flask працює в окремому потоці
+    # Flask у окремому потоці
     threading.Thread(
         target=lambda: app.run(host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
     ).start()
