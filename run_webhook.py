@@ -24,13 +24,15 @@ async def echo_handler(message):
     await message.answer(f"Echo: {message.text}")
 
 
+loop = asyncio.get_event_loop()
+
 @app.post(WEBHOOK_PATH)
-async def webhook():
+def webhook():
     if not request.is_json:
         abort(400)
     data = request.get_json(force=True)
     update = Update.model_validate(data)
-    await dp.feed_update(bot, update)
+    asyncio.run_coroutine_threadsafe(dp.feed_update(bot, update), loop)
     return {"ok": True}
 
 
@@ -49,7 +51,6 @@ async def on_shutdown():
 
 
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
     loop.run_until_complete(on_startup())
 
     # Flask у окремому потоці
