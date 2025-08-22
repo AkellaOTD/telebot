@@ -44,11 +44,19 @@ async def on_shutdown():
 
 
 if __name__ == "__main__":
+    import threading
+
     loop = asyncio.get_event_loop()
     loop.run_until_complete(on_startup())
 
-    # Запуск через uvicorn (бо Flask async + aiogram)
-    import uvicorn
-    uvicorn.run("run_webhook:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
+    # Flask працює в окремому потоці
+    threading.Thread(
+        target=lambda: app.run(host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
+    ).start()
 
-    loop.run_until_complete(on_shutdown())
+    try:
+        loop.run_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        loop.run_until_complete(on_shutdown())
