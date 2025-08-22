@@ -47,8 +47,10 @@ POST_TARGET_IDS = [
 BACKUP_CHANNEL_IDS = [
     int(x.strip()) for x in os.getenv("BACKUP_CHANNEL_IDS", "").split(",") if x.strip()
 ]
-CITY_DISTRICTS = [x.strip() for x in os.getenv("CITY_DISTRICTS", "").split(",") if x.strip()]
-BAD_WORDS = [x.strip().lower() for x in os.getenv("BAD_WORDS", "").split(",") if x.strip()]
+CITY_DISTRICTS = [x.strip() for x in os.getenv(
+    "CITY_DISTRICTS", "").split(",") if x.strip()]
+BAD_WORDS = [x.strip().lower()
+             for x in os.getenv("BAD_WORDS", "").split(",") if x.strip()]
 
 if not BOT_TOKEN:
     raise SystemExit("BOT_TOKEN is not set in .env")
@@ -57,9 +59,11 @@ if not BOT_TOKEN:
 # Утиліти
 # =========================
 
+
 def now_tz() -> datetime:
     # Без зовнішніх залежностей: використовуємо локальний UTC, зсув не критичний
     return datetime.now(timezone.utc)
+
 
 async def anti_flood(user_id: int, db: aiosqlite.Connection) -> bool:
     """Повертає True, якщо треба загальмувати (занадто часто)."""
@@ -72,12 +76,14 @@ async def anti_flood(user_id: int, db: aiosqlite.Connection) -> bool:
         last_ts = row[0]
         if ts - last_ts < ANTIFLOOD_SECONDS:
             await db.execute(
-                "UPDATE antiflood SET last_action_at=? WHERE user_id=?", (ts, user_id)
+                "UPDATE antiflood SET last_action_at=? WHERE user_id=?", (
+                    ts, user_id)
             )
             await db.commit()
             return True
         await db.execute(
-            "UPDATE antiflood SET last_action_at=? WHERE user_id=?", (ts, user_id)
+            "UPDATE antiflood SET last_action_at=? WHERE user_id=?", (
+                ts, user_id)
         )
         await db.commit()
         return False
@@ -89,6 +95,7 @@ async def anti_flood(user_id: int, db: aiosqlite.Connection) -> bool:
         return False
 
 # Перцептивний хеш (dHash) для виявлення дублів фото
+
 
 def dhash_image_bytes(content: bytes, size: int = 8) -> str:
     with Image.open(io.BytesIO(content)) as img:
@@ -107,6 +114,7 @@ def dhash_image_bytes(content: bytes, size: int = 8) -> str:
 # =========================
 # БД (SQLite)
 # =========================
+
 
 SCHEMA_SQL = """
 PRAGMA journal_mode=WAL;
@@ -178,6 +186,7 @@ CREATE TABLE IF NOT EXISTS moderation_queue (
 CREATE INDEX IF NOT EXISTS idx_posts_status_created ON posts(status, created_at);
 """
 
+
 async def init_db(db: aiosqlite.Connection):
     await db.executescript(SCHEMA_SQL)
     # Ініціалізувати заборонені слова з .env
@@ -192,6 +201,7 @@ async def init_db(db: aiosqlite.Connection):
 # Стан машини / FSM для /add
 # =========================
 
+
 class AddPost(StatesGroup):
     waiting_category = State()
     waiting_district = State()
@@ -199,6 +209,7 @@ class AddPost(StatesGroup):
     waiting_description = State()
     waiting_photos = State()
     waiting_contacts = State()
+
 
 CATEGORIES = [
     "Віддам тварину",
@@ -211,6 +222,7 @@ CATEGORIES = [
 # =========================
 # Розмітки клавіатур
 # =========================
+
 
 def kb_agree_rules() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
@@ -256,6 +268,7 @@ def kb_admin() -> InlineKeyboardMarkup:
 # =========================
 # Тексти/шаблони
 # =========================
+
 
 RULES_TEXT = (
     """<b>Правила подання оголошень</b>\n\n"
@@ -303,12 +316,14 @@ def format_post_text(row: dict) -> str:
 # Бот/Диспетчер
 # =========================
 
+
 bot = Bot(BOT_TOKEN, parse_mode=ParseMode.HTML)
 dp = Dispatcher()
 
 # Пул зʼєднання з БД (простий варіант: одне зʼєднання на процес)
 DB_PATH = os.getenv("DATABASE_PATH", "bot.db")
 _db_conn: Optional[aiosqlite.Connection] = None
+
 
 async def get_db() -> aiosqlite.Connection:
     global _db_conn
@@ -321,6 +336,7 @@ async def get_db() -> aiosqlite.Connection:
 # Перевірки/фільтри
 # =========================
 
+
 async def contains_bad_words(text: str, db: aiosqlite.Connection) -> bool:
     t = text.lower()
     words = []
@@ -332,6 +348,7 @@ async def contains_bad_words(text: str, db: aiosqlite.Connection) -> bool:
             return True
     return False
 
+
 async def is_blacklisted(user_id: int, db: aiosqlite.Connection) -> bool:
     async with db.execute("SELECT 1 FROM blacklist WHERE user_id=?", (user_id,)) as cur:
         row = await cur.fetchone()
@@ -340,6 +357,7 @@ async def is_blacklisted(user_id: int, db: aiosqlite.Connection) -> bool:
 # =========================
 # Команди користувача
 # =========================
+
 
 @dp.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext):
@@ -351,7 +369,8 @@ async def cmd_start(message: Message, state: FSMContext):
         return
     # Перевірити чи юзер вже погодився з правилами
     async with db.execute(
-        "SELECT agreed_rules FROM users WHERE user_id=?", (message.from_user.id,)
+        "SELECT agreed_rules FROM users WHERE user_id=?", (
+            message.from_user.id,)
     ) as cur:
         row = await cur.fetchone()
     if not row:
@@ -368,13 +387,15 @@ async def cmd_start(message: Message, state: FSMContext):
         return
     await message.answer("Вітаю! " + RULES_SHORT)
 
+
 @dp.callback_query(F.data.startswith("rules:"))
 async def cb_rules(call: CallbackQuery):
     db = await get_db()
     cmd = call.data.split(":")[1]
     if cmd == "agree":
         await db.execute(
-            "UPDATE users SET agreed_rules=1 WHERE user_id=?", (call.from_user.id,)
+            "UPDATE users SET agreed_rules=1 WHERE user_id=?", (
+                call.from_user.id,)
         )
         await db.commit()
         await call.message.edit_text("Дякую! Тепер можна створити оголошення: /add")
@@ -386,17 +407,21 @@ async def cb_rules(call: CallbackQuery):
             pass
     await call.answer()
 
+
 @dp.message(Command("faq"))
 async def cmd_faq(message: Message):
     await message.answer(FAQ_TEXT)
+
 
 @dp.message(Command("contacts"))
 async def cmd_contacts(message: Message):
     await message.answer(CONTACTS_TEXT)
 
+
 @dp.message(Command("rules"))
 async def cmd_rules(message: Message):
     await message.answer(RULES_TEXT)
+
 
 @dp.message(Command("my_posts"))
 async def cmd_my_posts(message: Message):
@@ -417,6 +442,7 @@ async def cmd_my_posts(message: Message):
 
 # ==== /add
 
+
 @dp.message(Command("add"))
 async def cmd_add(message: Message, state: FSMContext):
     db = await get_db()
@@ -427,7 +453,8 @@ async def cmd_add(message: Message, state: FSMContext):
         return
     # перевірити згоду з правилами
     async with db.execute(
-        "SELECT agreed_rules FROM users WHERE user_id=?", (message.from_user.id,)
+        "SELECT agreed_rules FROM users WHERE user_id=?", (
+            message.from_user.id,)
     ) as cur:
         row = await cur.fetchone()
     if not row or row[0] != 1:
@@ -446,6 +473,7 @@ async def cmd_add(message: Message, state: FSMContext):
     )
     await message.answer("Оберіть категорію оголошення:", reply_markup=kb_categories())
 
+
 @dp.callback_query(AddPost.waiting_category, F.data.startswith("cat:"))
 async def choose_category(call: CallbackQuery, state: FSMContext):
     cat = call.data.split(":", 1)[1]
@@ -456,6 +484,7 @@ async def choose_category(call: CallbackQuery, state: FSMContext):
     await call.message.edit_text("Оберіть район:", reply_markup=kb_districts())
     await call.answer()
 
+
 @dp.callback_query(AddPost.waiting_district, F.data.startswith("dist:"))
 async def choose_district(call: CallbackQuery, state: FSMContext):
     dist = call.data.split(":", 1)[1]
@@ -465,6 +494,7 @@ async def choose_district(call: CallbackQuery, state: FSMContext):
     await state.set_state(AddPost.waiting_title)
     await call.message.edit_text("Введіть заголовок (до 200 символів):")
     await call.answer()
+
 
 @dp.message(AddPost.waiting_title)
 async def add_title(message: Message, state: FSMContext):
@@ -482,6 +512,7 @@ async def add_title(message: Message, state: FSMContext):
     await state.set_state(AddPost.waiting_description)
     await message.answer("Опишіть оголошення (до 2000 символів):")
 
+
 @dp.message(AddPost.waiting_description)
 async def add_description(message: Message, state: FSMContext):
     desc = message.text.strip() if message.text else ""
@@ -497,6 +528,7 @@ async def add_description(message: Message, state: FSMContext):
     await state.update_data(**data)
     await state.set_state(AddPost.waiting_photos)
     await message.answer("Надішліть 1–20 фото. Коли завершите — напишіть слово <b>ГОТОВО</b>.")
+
 
 @dp.message(AddPost.waiting_photos, F.photo)
 async def add_photo(message: Message, state: FSMContext):
@@ -515,10 +547,12 @@ async def add_photo(message: Message, state: FSMContext):
     if any(p["phash"] == phash for p in photos if p.get("phash")):
         await message.answer("Схоже, це дубль фото — пропускаю.")
         return
-    photos.append({"file_id": tg_photo.file_id, "unique_id": tg_photo.file_unique_id, "phash": phash})
+    photos.append({"file_id": tg_photo.file_id,
+                   "unique_id": tg_photo.file_unique_id, "phash": phash})
     data["post"]["photos"] = photos
     await state.update_data(**data)
     await message.answer(f"Фото додано ({len(photos)}/20). Надсилайте ще або напишіть \"ГОТОВО\".")
+
 
 @dp.message(AddPost.waiting_photos)
 async def photos_done_or_text(message: Message, state: FSMContext):
@@ -531,6 +565,7 @@ async def photos_done_or_text(message: Message, state: FSMContext):
         return
     await state.set_state(AddPost.waiting_contacts)
     await message.answer("Додайте контакти (до 200 символів):")
+
 
 @dp.message(AddPost.waiting_contacts)
 async def add_contacts(message: Message, state: FSMContext):
@@ -615,11 +650,13 @@ async def add_contacts(message: Message, state: FSMContext):
 # Адмін-панель / Модерація
 # =========================
 
+
 @dp.message(Command("admin"))
 async def cmd_admin(message: Message):
     if message.chat.type != ChatType.PRIVATE:
         return
     await message.answer("Панель адміністратора", reply_markup=kb_admin())
+
 
 @dp.callback_query(F.data == "admin:queue")
 async def admin_queue(call: CallbackQuery):
@@ -636,6 +673,7 @@ async def admin_queue(call: CallbackQuery):
     await call.message.edit_text("Найближчі в черзі: " + ", ".join(ids))
     await call.answer()
 
+
 @dp.callback_query(F.data == "admin:stats")
 async def admin_stats(call: CallbackQuery):
     db = await get_db()
@@ -644,7 +682,7 @@ async def admin_stats(call: CallbackQuery):
     week_ago = now - 86400 * 7
     month_ago = now - 86400 * 30
 
-    def count_since(ts: int) -> Tuple[int, int]:
+    async def count_since(ts: int) -> Tuple[int, int]:
         return (
             # created
             (
@@ -682,6 +720,7 @@ async def admin_stats(call: CallbackQuery):
     )
     await call.message.edit_text(text)
     await call.answer()
+
 
 @dp.callback_query(F.data.startswith("mod:"))
 async def cb_moderation(call: CallbackQuery):
@@ -736,6 +775,7 @@ async def cb_moderation(call: CallbackQuery):
         await call.answer("Відхилено")
         return
 
+
 async def log_admin(admin_id: int, action: str):
     db = await get_db()
     await db.execute(
@@ -753,6 +793,7 @@ async def log_admin(admin_id: int, action: str):
 # Автопостинг / Розклад
 # =========================
 
+
 async def ensure_default_schedules(db: aiosqlite.Connection):
     # для кожного пост-таргета має бути запис у schedules
     ts = int(now_tz().timestamp())
@@ -762,6 +803,7 @@ async def ensure_default_schedules(db: aiosqlite.Connection):
             (chat_id, DEFAULT_POST_INTERVAL_MIN, ts),
         )
     await db.commit()
+
 
 async def pick_next_post(db: aiosqlite.Connection) -> Optional[Tuple[int, dict, List[str]]]:
     # вибрати найстаріший approved пост, що ще не публікувався
@@ -786,6 +828,7 @@ async def pick_next_post(db: aiosqlite.Connection) -> Optional[Tuple[int, dict, 
     }
     return post_id, payload, photos
 
+
 async def publish_post_to(chat_id: int, text: str, photos: List[str]) -> Optional[int]:
     try:
         msg = await bot.send_photo(chat_id, photos[0], caption=text)
@@ -796,6 +839,7 @@ async def publish_post_to(chat_id: int, text: str, photos: List[str]) -> Optiona
         return msg.message_id
     except Exception:
         return None
+
 
 async def autoposter_loop():
     await asyncio.sleep(2)
@@ -849,6 +893,7 @@ async def autoposter_loop():
 
 LINK_RE = re.compile(r"https?://|t\.me/|@\w+", re.I)
 
+
 @dp.message(F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}))
 async def group_guard(message: Message):
     # банально: якщо новий юзер шле лінки — видалити
@@ -861,6 +906,7 @@ async def group_guard(message: Message):
 # =========================
 # Головний вхід
 # =========================
+
 
 async def main():
     db = await get_db()
