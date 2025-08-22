@@ -28,6 +28,9 @@ from aiogram.types import (
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from PIL import Image
 from dotenv import load_dotenv
+from telegram import Bot, ParseMode
+from telegram.constants import ParseMode  # if needed
+from telegram.bot import DefaultBotProperties
 
 # =========================
 # Конфіг
@@ -316,8 +319,10 @@ def format_post_text(row: dict) -> str:
 # Бот/Диспетчер
 # =========================
 
-
-bot = Bot(BOT_TOKEN, parse_mode=ParseMode.HTML)
+bot = Bot(
+    BOT_TOKEN,
+    default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+)
 dp = Dispatcher()
 
 # Пул зʼєднання з БД (простий варіант: одне зʼєднання на процес)
