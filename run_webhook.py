@@ -1,11 +1,54 @@
+import os
 import asyncio
-import uvicorn
-from app.config import settings
-from app.database import init_models
+from flask import Flask, request, abort
+from aiogram import Bot, Dispatcher
+from aiogram.types import Update
+from dotenv import load_dotenv
 
-async def _init():
-    await init_models()
+load_dotenv()
+
+TOKEN = os.getenv("BOT_TOKEN")
+WEBHOOK_PATH = os.getenv("WEBHOOK_PATH", "/webhook")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # https://yourdomain.com/webhook
+
+app = Flask(__name__)
+
+bot = Bot(token=TOKEN)
+dp = Dispatcher()
+
+
+# 👉 тут реєструєш свої хендлери
+@dp.message()
+async def echo_handler(message):
+    await message.answer(f"Echo: {message.text}")
+
+
+@app.post(WEBHOOK_PATH)
+async def webhook():
+    if not request.is_json:
+        abort(400)
+    data = request.get_json(force=True)
+    update = Update.model_validate(data)
+    await dp.feed_update(bot, update)
+    return {"ok": True}
+
+
+async def on_startup():
+    # встановлюємо webhook у Telegram
+    await bot.set_webhook(WEBHOOK_URL + WEBHOOK_PATH)
+
+
+async def on_shutdown():
+    await bot.delete_webhook()
+    await bot.session.close()
+
 
 if __name__ == "__main__":
-    asyncio.run(_init())
-    uvicorn.run("web.flask_app:app", host="0.0.0.0", port=settings.PORT, reload=False)
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(on_startup())
+
+    # Запуск через uvicorn (бо Flask async + aiogram)
+    import uvicorn
+    uvicorn.run("run_webhook:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
+
+    loop.run_until_complete(on_shutdown())
