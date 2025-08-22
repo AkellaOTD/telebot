@@ -1,6 +1,6 @@
-aiogram>=3.4.1
-aiosqlite>=0.19.0
-python-dotenv>=1.0.1
-Pillow>=10.3.0
+aiogram >= 3.4.1
+aiosqlite >= 0.19.0
+python-dotenv >= 1.0.1
+Pillow >= 10.3.0
 gunicorn
-python-telegram-bot>=20.0
+python-telegram-bot >= 20.0

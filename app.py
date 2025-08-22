@@ -28,7 +28,8 @@ from aiogram.types import (
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from PIL import Image
 from dotenv import load_dotenv
-from telegram import Bot, DefaultBotProperties
+from telegram import Bot
+# from telegram import DefaultBotProperties
 from telegram.constants import ParseMode
 
 # =========================
@@ -320,7 +321,7 @@ def format_post_text(row: dict) -> str:
 
 bot = Bot(
     BOT_TOKEN,
-    default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+    # default=DefaultBotProperties(parse_mode=ParseMode.HTML)
 )
 dp = Dispatcher()
 
