@@ -7,6 +7,7 @@ from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from aiogram.utils.executor import start_webhook
 import sqlite3
+from fastapi.responses import JSONResponse
 
 # -------------------------------
 # 🔹 Налаштування
@@ -196,6 +197,39 @@ async def on_startup(dp):
 async def on_shutdown(dp):
     await bot.delete_webhook()
 
+
+# -------------------------------
+# 🔹 Виведення користувачів
+# -------------------------------
+@app.get("/users")
+async def get_users():
+    cursor.execute("SELECT user_id, accepted_rules FROM users")
+    rows = cursor.fetchall()
+    users = [{"user_id": r[0], "accepted_rules": bool(r[1])} for r in rows]
+    return JSONResponse(content=users)
+
+# -------------------------------
+# 🔹 Виведення оголошень
+# -------------------------------
+@app.get("/ads")
+async def get_ads():
+    cursor.execute("SELECT id, user_id, category, district, title, description, photos, contacts FROM ads")
+    rows = cursor.fetchall()
+    ads = [
+        {
+            "id": r[0],
+            "user_id": r[1],
+            "category": r[2],
+            "district": r[3],
+            "title": r[4],
+            "description": r[5],
+            "photos": r[6].split(",") if r[6] else [],
+            "contacts": r[7]
+        }
+        for r in rows
+    ]
+    return JSONResponse(content=ads)
+    
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host=WEBAPP_HOST, port=WEBAPP_PORT)
