@@ -14,17 +14,17 @@ from fastapi.responses import JSONResponse
 # -------------------------------
 API_TOKEN = os.getenv("BOT_TOKEN", "YOUR_TELEGRAM_BOT_TOKEN")
 
-WEBHOOK_HOST = os.getenv('WEBHOOK_HOST')  # заміни на свій домен
+WEBHOOK_HOST = os.getenv('HOST')  # заміни на свій домен
 WEBHOOK_PATH = os.getenv('WEBHOOK_PATH')
 WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
 
-WEBAPP_HOST = os.getenv('WEBAPP_HOST')
+WEBAPP_HOST = os.getenv('HOST')
 WEBAPP_PORT = os.getenv('PORT')
 
 # -------------------------------
 # 🔹 База даних (SQLite)
 # -------------------------------
-conn = sqlite3.connect("bot.db", check_same_thread=False)
+conn = sqlite3.connect("data.db", check_same_thread=False)
 cursor = conn.cursor()
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS users (
