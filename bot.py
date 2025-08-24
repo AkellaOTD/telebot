@@ -115,7 +115,8 @@ async def cmd_create(message: types.Message, state: FSMContext):
 
     await AdForm.category.set()
     kb = ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.add("🏠 Нерухомість", "🚗 Авто", "📱 Електроніка", "👔 Робота")
+    kb.add("Віддам тварину", "Продам тварину", "Знайдена тварина",
+           "Загублена тварина", "Потрібна допомога ")
     await message.answer("Оберіть тематику оголошення:", reply_markup=kb)
 
 @dp.message_handler(state=AdForm.category)
