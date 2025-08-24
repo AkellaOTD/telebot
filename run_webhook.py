@@ -22,7 +22,8 @@ dp = Dispatcher()
 # === Приклад простого хендлера ===
 @dp.include_router(group_posts_router)
 
-loop = asyncio.get_event_loop()
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
 
 
 @app.post(WEBHOOK_PATH)
