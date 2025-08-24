@@ -1,5 +1,6 @@
 import os
 import sqlite3
+from aiogram import types
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from aiogram import Bot, Dispatcher, types
@@ -97,7 +98,8 @@ async def process_rules(message: types.Message):
 # -------------------------------
 @app.post(WEBHOOK_PATH)
 async def webhook(request: Request):
-    update = types.Update(**await request.json())
+    data = await request.json()
+    update = types.Update.to_object(data)   # ✅ правильне створення Update
     await dp.process_update(update)
     return {"ok": True}
 
