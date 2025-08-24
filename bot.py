@@ -218,3 +218,8 @@ async def webhook(request: Request):
 async def get_users():
     cursor.execute("SELECT * FROM users")
     return {"users": cursor.fetchall()}
+
+@app.get("/ads")
+async def get_ads():
+    cursor.execute("SELECT * FROM ads")
+    return {"ads": cursor.fetchall()}
