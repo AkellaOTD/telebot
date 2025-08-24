@@ -53,6 +53,8 @@ conn.commit()
 # -------------------------------
 # 🔹 Стан машини для оголошень
 # -------------------------------
+
+
 class AdForm(StatesGroup):
     category = State()
     district = State()
@@ -64,13 +66,17 @@ class AdForm(StatesGroup):
 # -------------------------------
 # 🔹 Хендлер /start
 # -------------------------------
+
+
 @dp.message_handler(commands="start")
 async def cmd_start(message: types.Message):
-    cursor.execute("SELECT accepted_rules FROM users WHERE user_id = ?", (message.from_user.id,))
+    cursor.execute(
+        "SELECT accepted_rules FROM users WHERE user_id = ?", (message.from_user.id,))
     user = cursor.fetchone()
 
     if not user:
-        cursor.execute("INSERT INTO users (user_id, accepted_rules) VALUES (?, 0)", (message.from_user.id,))
+        cursor.execute(
+            "INSERT INTO users (user_id, accepted_rules) VALUES (?, 0)", (message.from_user.id,))
         conn.commit()
         kb = ReplyKeyboardMarkup(resize_keyboard=True)
         kb.add("✅ Погоджуюсь", "❌ Не погоджуюсь")
@@ -88,23 +94,30 @@ async def cmd_start(message: types.Message):
 # -------------------------------
 # 🔹 Обробка погодження правил
 # -------------------------------
+
+
 @dp.message_handler(lambda m: m.text in ["✅ Погоджуюсь", "❌ Не погоджуюсь"])
 async def process_rules(message: types.Message):
     if message.text == "✅ Погоджуюсь":
-        cursor.execute("UPDATE users SET accepted_rules = 1 WHERE user_id = ?", (message.from_user.id,))
+        cursor.execute(
+            "UPDATE users SET accepted_rules = 1 WHERE user_id = ?", (message.from_user.id,))
         conn.commit()
         await message.answer("✅ Дякую! Тепер ви можете створювати оголошення командою /create", reply_markup=ReplyKeyboardRemove())
     else:
-        cursor.execute("DELETE FROM users WHERE user_id = ?", (message.from_user.id,))
+        cursor.execute("DELETE FROM users WHERE user_id = ?",
+                       (message.from_user.id,))
         conn.commit()
         await message.answer("👋 Ви відмовились від правил. До побачення!", reply_markup=ReplyKeyboardRemove())
 
 # -------------------------------
 # 🔹 Створення оголошення /create
 # -------------------------------
+
+
 @dp.message_handler(commands="create")
 async def cmd_create(message: types.Message, state: FSMContext):
-    cursor.execute("SELECT accepted_rules FROM users WHERE user_id = ?", (message.from_user.id,))
+    cursor.execute(
+        "SELECT accepted_rules FROM users WHERE user_id = ?", (message.from_user.id,))
     user = cursor.fetchone()
 
     if not user or not user[0]:
@@ -113,8 +126,10 @@ async def cmd_create(message: types.Message, state: FSMContext):
 
     await AdForm.category.set()
     kb = ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.add("🏠 Нерухомість", "🚗 Авто", "📱 Електроніка", "👔 Робота")
+    kb.add("Віддам тварину", "Продам тварину", "Знайдена тварина",
+           "Загублена тварина", "Потрібна допомога ")
     await message.answer("Оберіть тематику оголошення:", reply_markup=kb)
+
 
 @dp.message_handler(state=AdForm.category)
 async def process_category(message: types.Message, state: FSMContext):
@@ -124,11 +139,13 @@ async def process_category(message: types.Message, state: FSMContext):
     kb.add("Центр", "Лівий берег", "Правий берег")
     await message.answer("Оберіть район:", reply_markup=kb)
 
+
 @dp.message_handler(state=AdForm.district)
 async def process_district(message: types.Message, state: FSMContext):
     await state.update_data(district=message.text)
     await AdForm.next()
     await message.answer("Введіть заголовок (до 200 символів):", reply_markup=ReplyKeyboardRemove())
+
 
 @dp.message_handler(state=AdForm.title)
 async def process_title(message: types.Message, state: FSMContext):
@@ -139,6 +156,7 @@ async def process_title(message: types.Message, state: FSMContext):
     await AdForm.next()
     await message.answer("Введіть опис (до 2000 символів):")
 
+
 @dp.message_handler(state=AdForm.description)
 async def process_description(message: types.Message, state: FSMContext):
     if len(message.text) > 2000:
@@ -147,6 +165,7 @@ async def process_description(message: types.Message, state: FSMContext):
     await state.update_data(description=message.text)
     await AdForm.next()
     await message.answer("Надішліть фото (до 20 шт). Якщо без фото — напишіть 'Пропустити'.")
+
 
 @dp.message_handler(content_types=["photo", "text"], state=AdForm.photos)
 async def process_photos(message: types.Message, state: FSMContext):
@@ -161,6 +180,7 @@ async def process_photos(message: types.Message, state: FSMContext):
     elif message.text.lower() in ["готово", "пропустити"]:
         await AdForm.next()
         await message.answer("Введіть контактну інформацію (до 200 символів):")
+
 
 @dp.message_handler(state=AdForm.contacts)
 async def process_contacts(message: types.Message, state: FSMContext):
@@ -191,15 +211,19 @@ async def process_contacts(message: types.Message, state: FSMContext):
 # -------------------------------
 # 🔹 FastAPI routes
 # -------------------------------
+
+
 @app.on_event("startup")
 async def on_startup():
     await bot.set_webhook(WEBHOOK_URL)
+
 
 @app.on_event("shutdown")
 async def on_shutdown():
     await bot.delete_webhook()
     await dp.storage.close()
     await dp.storage.wait_closed()
+
 
 @app.post(WEBHOOK_PATH)
 async def webhook(request: Request):
@@ -214,15 +238,18 @@ async def webhook(request: Request):
     await dp.process_update(update)
     return {"ok": True}
 
+
 @app.get("/users")
 async def get_users():
     cursor.execute("SELECT * FROM users")
     return {"users": cursor.fetchall()}
+
 
 @app.get("/ads")
 async def get_ads():
     cursor.execute("SELECT * FROM ads")
     rows = cursor.fetchall()
     columns = [desc[0] for desc in cursor.description]  # імена колонок
-    ads = [dict(zip(columns, row)) for row in rows]     # робимо список словників
+    ads = [dict(zip(columns, row))
+           for row in rows]     # робимо список словників
     return {"ads": ads}
