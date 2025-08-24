@@ -21,10 +21,32 @@ dp = Dispatcher()
 # === Приклад простого хендлера ===
 @dp.message()
 async def echo_handler(message):
-    await message.answer(f"Echo: {json.dumps(message)}")
+    # "
+    "message": {
+        "message_id": 123,
+        "from": {
+            "id": 987654321,
+            "is_bot": false,
+            "first_name": "User",
+            "username": "username"
+        },
+        "chat": {
+            "id": 987654321,
+            "first_name": "User",
+            "username": "username",
+            "type": "private"
+        },
+        "date": 1678886400,
+        "text": "Hello, Telegram!"
+    }
+  # "
+    await message.answer(
+        f"from - user_id : {message.from.id},chat_id : {message.chat.id},message_text : {message.text}"
+        )
 
 
 loop = asyncio.get_event_loop()
+
 
 @app.post(WEBHOOK_PATH)
 def webhook():
@@ -55,7 +77,8 @@ if __name__ == "__main__":
 
     # Flask у окремому потоці
     threading.Thread(
-        target=lambda: app.run(host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
+        target=lambda: app.run(
+            host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
     ).start()
 
     try:
