@@ -222,4 +222,7 @@ async def get_users():
 @app.get("/ads")
 async def get_ads():
     cursor.execute("SELECT * FROM ads")
-    return {"ads": cursor.fetchall()}
+    rows = cursor.fetchall()
+    columns = [desc[0] for desc in cursor.description]  # імена колонок
+    ads = [dict(zip(columns, row)) for row in rows]     # робимо список словників
+    return {"ads": ads}
