@@ -21,25 +21,25 @@ dp = Dispatcher()
 # === Приклад простого хендлера ===
 @dp.message()
 async def echo_handler(message):
-    # "
-    "message": {
-        "message_id": 123,
-        "from": {
-            "id": 987654321,
-            "is_bot": false,
-            "first_name": "User",
-            "username": "username"
-        },
-        "chat": {
-            "id": 987654321,
-            "first_name": "User",
-            "username": "username",
-            "type": "private"
-        },
-        "date": 1678886400,
-        "text": "Hello, Telegram!"
-    }
-  # "
+#     # "
+#     "message": {
+#         "message_id": 123,
+#         "from": {
+#             "id": 987654321,
+#             "is_bot": false,
+#             "first_name": "User",
+#             "username": "username"
+#         },
+#         "chat": {
+#             "id": 987654321,
+#             "first_name": "User",
+#             "username": "username",
+#             "type": "private"
+#         },
+#         "date": 1678886400,
+#         "text": "Hello, Telegram!"
+#     }
+#   # "
     await message.answer(
         f"from - user_id : {message.from.id},chat_id : {message.chat.id},message_text : {message.text}"
         )
