@@ -5,6 +5,7 @@ from flask import Flask, request, abort
 from aiogram import Bot, Dispatcher
 from aiogram.types import Update
 from dotenv import load_dotenv
+from handlers.group_posts import group_posts_router
 
 load_dotenv()
 
@@ -19,31 +20,7 @@ dp = Dispatcher()
 
 
 # === Приклад простого хендлера ===
-@dp.message()
-async def echo_handler(message):
-#     # "
-#     "message": {
-#         "message_id": 123,
-#         "from": {
-#             "id": 987654321,
-#             "is_bot": false,
-#             "first_name": "User",
-#             "username": "username"
-#         },
-#         "chat": {
-#             "id": 987654321,
-#             "first_name": "User",
-#             "username": "username",
-#             "type": "private"
-#         },
-#         "date": 1678886400,
-#         "text": "Hello, Telegram!"
-#     }
-#   # "
-    await message.answer(
-        f"from - user_id : {message.from.id},chat_id : {message.chat.id},message_text : {message.text}"
-        )
-
+@dp.include_router(group_posts_router)
 
 loop = asyncio.get_event_loop()
 
