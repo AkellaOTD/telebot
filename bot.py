@@ -14,12 +14,12 @@ from fastapi.responses import JSONResponse
 # -------------------------------
 API_TOKEN = os.getenv("BOT_TOKEN", "YOUR_TELEGRAM_BOT_TOKEN")
 
-WEBHOOK_HOST = "https://your-server.com"  # заміни на свій домен
-WEBHOOK_PATH = "/webhook"
+WEBHOOK_HOST = os.getenv('WEBHOOK_HOST')  # заміни на свій домен
+WEBHOOK_PATH = os.getenv('WEBHOOK_PATH')
 WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
 
-WEBAPP_HOST = "0.0.0.0"
-WEBAPP_PORT = 8000
+WEBAPP_HOST = os.getenv('WEBAPP_HOST')
+WEBAPP_PORT = os.getenv('PORT')
 
 # -------------------------------
 # 🔹 База даних (SQLite)
@@ -229,7 +229,7 @@ async def get_ads():
         for r in rows
     ]
     return JSONResponse(content=ads)
-    
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host=WEBAPP_HOST, port=WEBAPP_PORT)
