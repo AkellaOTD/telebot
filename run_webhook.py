@@ -21,7 +21,7 @@ dp = Dispatcher()
 # === Приклад простого хендлера ===
 @dp.message()
 async def echo_handler(message):
-    await message.answer(f"Echo: {message.text}")
+    await message.answer(f"Echo: {message}")
 
 
 loop = asyncio.get_event_loop()
