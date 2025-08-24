@@ -99,7 +99,13 @@ async def process_rules(message: types.Message):
 @app.post(WEBHOOK_PATH)
 async def webhook(request: Request):
     data = await request.json()
-    update = types.Update.to_object(data)   # ✅ правильне створення Update
+    update = types.Update.to_object(data)
+
+    # 🔥 Фікс: явно передаємо бота у контекст
+    from aiogram import Bot
+    Bot.set_current(bot)
+    Dispatcher.set_current(dp)
+
     await dp.process_update(update)
     return {"ok": True}
 
