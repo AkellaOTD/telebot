@@ -363,21 +363,22 @@ async def process_quick_reject(callback_query: types.CallbackQuery):
 # Ручна причина
 pending_rejections = {}
 
+pending_rejections = {}
+
 @dp.callback_query_handler(lambda c: c.data.startswith("reason_other_"))
 async def process_reject_reason_other(callback_query: types.CallbackQuery):
     ad_id = int(callback_query.data.split("_")[2])
-    pending_rejections[callback_query.message.message_id] = ad_id
+    pending_rejections[callback_query.from_user.id] = ad_id
 
     await bot.send_message(
         chat_id=callback_query.message.chat.id,
-        text=f"✏️ Введіть причину відхилення для оголошення #{ad_id}:",
-        reply_markup=ForceReply(selective=True)
+        text=f"✏️ Введіть причину відхилення для оголошення #{ad_id} звичайним повідомленням у цей чат."
     )
     await callback_query.answer()
 
-@dp.message_handler(lambda msg: msg.reply_to_message and msg.reply_to_message.message_id in pending_rejections)
+@dp.message_handler(lambda msg: msg.from_user.id in pending_rejections)
 async def save_custom_reject_reason(message: types.Message):
-    ad_id = pending_rejections.pop(message.reply_to_message.message_id)
+    ad_id = pending_rejections.pop(message.from_user.id)
     reason = message.text
 
     cursor.execute("UPDATE ads SET is_rejected=1, rejection_reason=? WHERE id=?", (reason, ad_id))
@@ -395,7 +396,6 @@ async def save_custom_reject_reason(message: types.Message):
     )
 
     await message.answer(f"✅ Оголошення #{ad_id} відхилено. Причина: {reason}")
-
 # -------------------------------
 # 🔹 Опублікувати
 # -------------------------------
