@@ -1,3 +1,4 @@
+from fastapi import HTTPException
 import os
 import re
 import sqlite3
@@ -226,7 +227,7 @@ async def process_contacts(message: types.Message, state: FSMContext):
     conn.commit()
     await message.answer("✅ Ваше оголошення збережено!")
     await state.finish()
-    
+
 cursor.execute("SELECT last_insert_rowid()")
 ad_id = cursor.fetchone()[0]
 
@@ -258,7 +259,7 @@ async def get_ads():
     columns = [desc[0] for desc in cursor.description]
     ads = [dict(zip(columns, row)) for row in rows]
     return {"ads": ads}
-from fastapi import HTTPException
+
 
 @app.get("/ads/{ad_id}")
 async def get_ad(ad_id: int):
@@ -304,6 +305,115 @@ async def get_users():
     users = [dict(zip(columns, row)) for row in rows]
     return {"users": users}
 
+
+def get_moder_keyboard(ad_id: int):
+    kb = InlineKeyboardMarkup(row_width=2)
+    kb.add(
+        InlineKeyboardButton("✅ Опублікувати", callback_data=f"publish_{ad_id}"),
+        InlineKeyboardButton("❌ Відхилити", callback_data=f"reject_{ad_id}")
+    )
+    return kb
+# Надсилаємо в групу модераторів
+    moder_text = (
+        f"📢 НОВЕ ОГОЛОШЕННЯ #{ad_id}\n\n"
+        f"🔹 Категорія: {data['category']}\n"
+        f"📍 Район: {data['district']}\n"
+        f"🏷 Заголовок: {data['title']}\n"
+        f"📝 Опис: {data['description']}\n"
+        f"📞 Контакти: {data['contacts']}\n"
+    )
+
+    msg = await bot.send_message(
+        chat_id=int(os.getenv("MODERATORS_CHAT_ID")),
+        text=moder_text,
+        reply_markup=get_moder_keyboard(ad_id)
+    )
+
+    cursor.execute("UPDATE ads SET moder_message_id=? WHERE id=?",
+                   (msg.message_id, ad_id))
+    conn.commit()
+    reason = State()
+    # -------------------------------
+
+
+@dp.callback_query_handler(lambda c: c.data.startswith("reject_"))
+async def process_reject(callback_query: types.CallbackQuery, state: FSMContext):
+    ad_id = int(callback_query.data.split("_")[1])
+    await state.update_data(ad_id=ad_id)
+
+    await bot.send_message(callback_query.from_user.id, "Введіть причину відхилення:")
+    await RejectAd.reason.set()
+    await callback_query.answer()
+
+
+@dp.callback_query_handler(lambda c: c.data.startswith("publish_"))
+async def process_publish(callback_query: types.CallbackQuery):
+    ad_id = int(callback_query.data.split("_")[1])
+
+    # Беремо оголошення з БД
+    cursor.execute(
+        "SELECT user_id, category, district, title, description, contacts FROM ads WHERE id=?", (ad_id,))
+    ad = cursor.fetchone()
+
+    if not ad:
+        await callback_query.answer("Оголошення не знайдено ❌", show_alert=True)
+        return
+
+    user_id, category, district, title, description, contacts = ad
+
+    # Оновлюємо статус у БД
+    cursor.execute("UPDATE ads SET is_published=1 WHERE id=?", (ad_id,))
+    conn.commit()
+
+    # Формуємо текст для публікації
+    pub_text = (
+        f"📢 ОГОЛОШЕННЯ #{ad_id}\n\n"
+        f"🔹 Категорія: {category}\n"
+        f"📍 Район: {district}\n"
+        f"🏷 Заголовок: {title}\n"
+        f"📝 Опис: {description}\n"
+        f"📞 Контакти: {contacts}\n"
+    )
+
+    # Надсилаємо у канал/групу публікацій
+    await bot.send_message(
+        chat_id=int(os.getenv("PUBLISH_CHAT_ID")),
+        text=pub_text
+    )
+
+    # Повідомляємо автора
+    await bot.send_message(user_id, "✅ Ваше оголошення успішно опубліковане!")
+
+    # Видаляємо з групи модераторів
+    cursor.execute("SELECT moder_message_id FROM ads WHERE id=?", (ad_id,))
+    row = cursor.fetchone()
+    if row and row[0]:
+        try:
+            await bot.delete_message(chat_id=int(os.getenv("MODERATORS_CHAT_ID")), message_id=row[0])
+        except:
+            pass
+
+    await callback_query.answer("Оголошення опубліковане ✅")
+
+
+@dp.message_handler(state=RejectAd.reason)
+async def save_reject_reason(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    ad_id = data["ad_id"]
+    reason = message.text
+
+    cursor.execute(
+        "UPDATE ads SET is_rejected=1, rejection_reason=? WHERE id=?", (reason, ad_id))
+    conn.commit()
+
+    # Отримуємо id користувача
+    cursor.execute("SELECT user_id FROM ads WHERE id=?", (ad_id,))
+    user_id = cursor.fetchone()[0]
+
+    await bot.send_message(user_id, f"❌ Ваше оголошення було відхилено.\nПричина: {reason}")
+
+    await message.answer("Оголошення відхилено ✅")
+    await state.finish()
 # -------------------------------
 # 🔹 Локальний запуск (dev)
 # -------------------------------
