@@ -346,13 +346,14 @@ async def process_publish(callback_query: types.CallbackQuery):
 
     await bot.send_message(user_id, "✅ Ваше оголошення успішно опубліковане!")
 
-    cursor.execute("SELECT moder_message_id FROM ads WHERE id=?", (ad_id,))
-    row = cursor.fetchone()
-    if row and row[0]:
-        try:
-            await bot.delete_message(chat_id=int(os.getenv("MODERATORS_CHAT_ID")), message_id=row[0])
-        except:
-            pass
+    # видалення повідомлення після його обробки
+    # cursor.execute("SELECT moder_message_id FROM ads WHERE id=?", (ad_id,))
+    # row = cursor.fetchone()
+    # if row and row[0]:
+    #     try:
+    #         await bot.delete_message(chat_id=int(os.getenv("MODERATORS_CHAT_ID")), message_id=row[0])
+    #     except:
+    #         pass
 
     await callback_query.answer("Оголошення опубліковане ✅")
 
