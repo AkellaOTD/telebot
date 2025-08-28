@@ -42,6 +42,8 @@ cursor.execute("""
 CREATE TABLE IF NOT EXISTS ads (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER,
+    username TEXT,
+    first_name TEXT,
     category TEXT,
     district TEXT,
     title TEXT,
@@ -83,6 +85,23 @@ def validate_input(text: str) -> tuple[bool, str]:
         if word in lowered:
             return False, f"❌ Текст містить заборонене слово: {word}"
     return True, ""
+
+# -------------------------------
+# 🔹 Допоміжні кнопки
+# -------------------------------
+def get_moder_keyboard(ad_id: int):
+    kb = InlineKeyboardMarkup(row_width=2)
+    kb.add(
+        InlineKeyboardButton("✅ Опублікувати", callback_data=f"publish_{ad_id}"),
+        InlineKeyboardButton("❌ Відхилити", callback_data=f"reject_{ad_id}")
+    )
+    return kb
+
+def get_user_button(user_id: int, username: str | None):
+    if username:
+        return InlineKeyboardButton(f"👤 @{username}", url=f"https://t.me/{username}")
+    else:
+        return InlineKeyboardButton("👤 Профіль", url=f"tg://user?id={user_id}")
 
 # -------------------------------
 # 🔹 /start
@@ -198,12 +217,14 @@ async def process_contacts(message: types.Message, state: FSMContext):
     data = await state.get_data()
     cursor.execute("""
     INSERT INTO ads (
-        user_id, category, district, title, description, photos, contacts,
+        user_id, username, first_name, category, district, title, description, photos, contacts,
         is_published, is_rejected, rejection_reason
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, NULL)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, NULL)
 """, (
         message.from_user.id,
+        message.from_user.username,
+        message.from_user.first_name,
         data["category"],
         data["district"],
         data["title"],
@@ -214,9 +235,9 @@ async def process_contacts(message: types.Message, state: FSMContext):
     conn.commit()
     ad_id = cursor.lastrowid
 
-    # Надсилаємо в групу модераторів
     moder_text = (
         f"📢 НОВЕ ОГОЛОШЕННЯ #{ad_id}\n\n"
+        f"👤 Користувач: {message.from_user.first_name or ''} (@{message.from_user.username}) [ID: {message.from_user.id}]\n\n"
         f"🔹 Категорія: {data['category']}\n"
         f"📍 Район: {data['district']}\n"
         f"🏷 Заголовок: {data['title']}\n"
@@ -225,6 +246,8 @@ async def process_contacts(message: types.Message, state: FSMContext):
     )
 
     photos = data.get("photos", "").split(",") if data.get("photos") else []
+    kb = get_moder_keyboard(ad_id)
+    kb.add(get_user_button(message.from_user.id, message.from_user.username))
 
     if photos:
         if len(photos) == 1:
@@ -232,7 +255,7 @@ async def process_contacts(message: types.Message, state: FSMContext):
                 chat_id=int(os.getenv("MODERATORS_CHAT_ID")),
                 photo=photos[0],
                 caption=moder_text,
-                reply_markup=get_moder_keyboard(ad_id)
+                reply_markup=kb
             )
         else:
             media = [types.InputMediaPhoto(p) for p in photos[:10]]
@@ -243,13 +266,13 @@ async def process_contacts(message: types.Message, state: FSMContext):
             msg = await bot.send_message(
                 chat_id=int(os.getenv("MODERATORS_CHAT_ID")),
                 text=moder_text,
-                reply_markup=get_moder_keyboard(ad_id)
+                reply_markup=kb
             )
     else:
         msg = await bot.send_message(
             chat_id=int(os.getenv("MODERATORS_CHAT_ID")),
             text=moder_text,
-            reply_markup=get_moder_keyboard(ad_id)
+            reply_markup=kb
         )
 
     cursor.execute("UPDATE ads SET moder_message_id=? WHERE id=?", (msg.message_id, ad_id))
@@ -261,14 +284,6 @@ async def process_contacts(message: types.Message, state: FSMContext):
 # -------------------------------
 # 🔹 Модерація
 # -------------------------------
-def get_moder_keyboard(ad_id: int):
-    kb = InlineKeyboardMarkup(row_width=2)
-    kb.add(
-        InlineKeyboardButton("✅ Опублікувати", callback_data=f"publish_{ad_id}"),
-        InlineKeyboardButton("❌ Відхилити", callback_data=f"reject_{ad_id}")
-    )
-    return kb
-
 @dp.callback_query_handler(lambda c: c.data.startswith("reject_"))
 async def process_reject(callback_query: types.CallbackQuery, state: FSMContext):
     ad_id = int(callback_query.data.split("_")[1])
@@ -298,20 +313,21 @@ async def process_publish(callback_query: types.CallbackQuery):
     ad_id = int(callback_query.data.split("_")[1])
 
     cursor.execute(
-        "SELECT user_id, category, district, title, description, contacts, photos FROM ads WHERE id=?", (ad_id,))
+        "SELECT user_id, username, first_name, category, district, title, description, contacts, photos FROM ads WHERE id=?", (ad_id,))
     ad = cursor.fetchone()
 
     if not ad:
         await callback_query.answer("Оголошення не знайдено ❌", show_alert=True)
         return
 
-    user_id, category, district, title, description, contacts, photos_str = ad
+    user_id, username, first_name, category, district, title, description, contacts, photos_str = ad
 
     cursor.execute("UPDATE ads SET is_published=1 WHERE id=?", (ad_id,))
     conn.commit()
 
     pub_text = (
         f"📢 ОГОЛОШЕННЯ #{ad_id}\n\n"
+        f"👤 Користувач: {first_name or ''} (@{username}) [ID: {user_id}]\n\n"
         f"🔹 Категорія: {category}\n"
         f"📍 Район: {district}\n"
         f"🏷 Заголовок: {title}\n"
@@ -320,13 +336,15 @@ async def process_publish(callback_query: types.CallbackQuery):
     )
 
     photos = photos_str.split(",") if photos_str else []
+    pub_kb = InlineKeyboardMarkup().add(get_user_button(user_id, username))
 
     if photos:
         if len(photos) == 1:
             await bot.send_photo(
                 chat_id=int(os.getenv("PUBLISH_CHAT_ID")),
                 photo=photos[0],
-                caption=pub_text
+                caption=pub_text,
+                reply_markup=pub_kb
             )
         else:
             media = [types.InputMediaPhoto(p) for p in photos[:10]]
@@ -336,17 +354,19 @@ async def process_publish(callback_query: types.CallbackQuery):
             )
             await bot.send_message(
                 chat_id=int(os.getenv("PUBLISH_CHAT_ID")),
-                text=pub_text
+                text=pub_text,
+                reply_markup=pub_kb
             )
     else:
         await bot.send_message(
             chat_id=int(os.getenv("PUBLISH_CHAT_ID")),
-            text=pub_text
+            text=pub_text,
+            reply_markup=pub_kb
         )
 
     await bot.send_message(user_id, "✅ Ваше оголошення успішно опубліковане!")
 
-    # видалення повідомлення після його обробки
+    # видалення повідомлення з чату модераторів
     # cursor.execute("SELECT moder_message_id FROM ads WHERE id=?", (ad_id,))
     # row = cursor.fetchone()
     # if row and row[0]:
