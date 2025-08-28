@@ -167,7 +167,7 @@ async def cmd_create(message: types.Message, state: FSMContext):
         await message.answer("⚠️ Спершу потрібно погодитись із правилами! Натисніть /start")
         return
 
-    cursor.execute("SELECT title FROM threads")
+    cursor.execute("SELECT title FROM threads WHERE chat_id=?", (int(os.getenv("MODERATORS_CHAT_ID")),))
     categories = [row[0] for row in cursor.fetchall()]
     if not categories:
         await message.answer("⚠️ Немає доступних категорій. Адміністратор має додати гілки командою /bindthread")
@@ -370,12 +370,14 @@ async def process_publish(callback_query: types.CallbackQuery):
     pub_kb = InlineKeyboardMarkup().add(get_user_button(user_id, username))
 
     # шукаємо thread_id і chat_id
-    cursor.execute("SELECT chat_id, thread_id FROM threads WHERE title=?", (category,))
+   cursor.execute("SELECT thread_id FROM threads WHERE chat_id=? AND title=?", (int(os.getenv("PUBLISH_CHAT_ID")), category))
     row = cursor.fetchone()
     if not row:
-        await callback_query.answer("❌ Категорія не привʼязана до гілки", show_alert=True)
+        await callback_query.answer("❌ Категорія не привʼязана до гілки у групі публікацій", show_alert=True)
         return
-    chat_id, thread_id = row
+
+    chat_id = int(os.getenv("PUBLISH_CHAT_ID"))
+    thread_id = row[0]
 
     if photos:
         photos = photos.split(",")
