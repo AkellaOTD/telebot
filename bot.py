@@ -370,7 +370,7 @@ async def process_publish(callback_query: types.CallbackQuery):
     pub_kb = InlineKeyboardMarkup().add(get_user_button(user_id, username))
 
     # шукаємо thread_id і chat_id
-   cursor.execute("SELECT thread_id FROM threads WHERE chat_id=? AND title=?", (int(os.getenv("PUBLISH_CHAT_ID")), category))
+    cursor.execute("SELECT thread_id FROM threads WHERE chat_id=? AND title=?", (int(os.getenv("PUBLISH_CHAT_ID")), category))
     row = cursor.fetchone()
     if not row:
         await callback_query.answer("❌ Категорія не привʼязана до гілки у групі публікацій", show_alert=True)
