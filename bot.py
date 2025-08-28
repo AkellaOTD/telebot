@@ -1,40 +1,29 @@
 import os
-import re
 import sqlite3
-from fastapi import FastAPI, Request
 from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
-from aiogram.types import ReplyKeyboardMarkup, ReplyKeyboardRemove
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto
+from fastapi import FastAPI
 import uvicorn
 
-# -------------------------------
-# 🔹 Конфіг
-# -------------------------------
-TOKEN = os.getenv("BOT_TOKEN")
-WEBHOOK_HOST = os.getenv("WEBHOOK_HOST")
-WEBHOOK_PATH = "/webhook"
-WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
+# -------------------
+# Ініціалізація
+# -------------------
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+MODERATORS_CHAT_ID = int(os.getenv("MODERATORS_CHAT_ID"))
+PUBLISH_CHAT_ID = int(os.getenv("PUBLISH_CHAT_ID"))
 
-bot = Bot(token=TOKEN)
-storage = MemoryStorage()
-dp = Dispatcher(bot, storage=storage)
+bot = Bot(token=BOT_TOKEN, parse_mode="HTML")
+dp = Dispatcher(bot, storage=MemoryStorage())
 app = FastAPI()
 
-# -------------------------------
-# 🔹 База даних
-# -------------------------------
-conn = sqlite3.connect("bot.db", check_same_thread=False)
+# -------------------
+# База даних
+# -------------------
+conn = sqlite3.connect("ads.db", check_same_thread=False)
 cursor = conn.cursor()
-
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER UNIQUE,
-    accepted_rules BOOLEAN
-)
-""")
 
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS ads (
@@ -45,14 +34,18 @@ CREATE TABLE IF NOT EXISTS ads (
     title TEXT,
     description TEXT,
     photos TEXT,
-    contacts TEXT
+    contacts TEXT,
+    is_published BOOLEAN DEFAULT 0,
+    is_rejected BOOLEAN DEFAULT 0,
+    rejection_reason TEXT,
+    moder_message_id INTEGER
 )
 """)
 conn.commit()
 
-# -------------------------------
-# 🔹 FSM
-# -------------------------------
+# -------------------
+# Стан машини
+# -------------------
 class AdForm(StatesGroup):
     category = State()
     district = State()
@@ -61,129 +54,94 @@ class AdForm(StatesGroup):
     photos = State()
     contacts = State()
 
-# -------------------------------
-# 🔹 Фільтр тексту
-# -------------------------------
-BANNED_WORDS = ["спам", "шахрайство", "лохотрон", "обман", "scam", "fraud"]
 
-def validate_input(text: str) -> tuple[bool, str]:
-    """Перевірка тексту на посилання і заборонені слова"""
-    if re.search(r"(http[s]?://|www\.|t\.me/)", text, re.IGNORECASE):
-        return False, "❌ Текст не може містити посилання!"
-    lowered = text.lower()
-    for word in BANNED_WORDS:
-        if word in lowered:
-            return False, f"❌ Текст містить заборонене слово: {word}"
-    return True, ""
+class RejectAd(StatesGroup):
+    waiting_reason = State()
 
-# -------------------------------
-# 🔹 /start
-# -------------------------------
-@dp.message_handler(commands="start")
-async def cmd_start(message: types.Message):
-    cursor.execute("SELECT accepted_rules FROM users WHERE user_id = ?", (message.from_user.id,))
-    user = cursor.fetchone()
 
-    if user and user[0]:
-        await message.answer("✅ Ви вже погодились з правилами! Можете створювати оголошення командою /create")
-        return
+# -------------------
+# Клавіатура для модерації
+# -------------------
+def get_moder_keyboard(ad_id: int):
+    kb = InlineKeyboardMarkup(row_width=2)
+    kb.add(
+        InlineKeyboardButton("✅ Опублікувати", callback_data=f"publish_{ad_id}"),
+        InlineKeyboardButton("❌ Відхилити", callback_data=f"reject_{ad_id}")
+    )
+    return kb
 
-    kb = ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.add("✅ Погоджуюсь", "❌ Не погоджуюсь")
-    await message.answer("📜 Правила:\n1. Без посилань.\n2. Без спаму.\n3. Заборонені слова не допускаються.\n\nВи погоджуєтесь?",
-                         reply_markup=kb)
 
-@dp.message_handler(lambda msg: msg.text in ["✅ Погоджуюсь", "❌ Не погоджуюсь"])
-async def rules_answer(message: types.Message):
-    if message.text == "✅ Погоджуюсь":
-        cursor.execute("INSERT OR REPLACE INTO users (user_id, accepted_rules) VALUES (?, ?)", (message.from_user.id, True))
-        conn.commit()
-        await message.answer("✅ Дякуємо! Тепер можете створити оголошення командою /create", reply_markup=ReplyKeyboardRemove())
-    else:
-        await message.answer("👋 Добре, до зустрічі!", reply_markup=ReplyKeyboardRemove())
-
-# -------------------------------
-# 🔹 /create (FSM)
-# -------------------------------
-@dp.message_handler(commands="create")
-async def cmd_create(message: types.Message, state: FSMContext):
-    cursor.execute("SELECT accepted_rules FROM users WHERE user_id = ?", (message.from_user.id,))
-    user = cursor.fetchone()
-    if not user or not user[0]:
-        await message.answer("⚠️ Спершу потрібно погодитись із правилами! Натисніть /start")
-        return
-
+# -------------------
+# Старт бота
+# -------------------
+@dp.message_handler(commands=["start"])
+async def start_cmd(message: types.Message):
+    await message.answer("👋 Вітаю! Давайте створимо ваше оголошення.\nНапишіть категорію:")
     await AdForm.category.set()
-    kb = ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.add("Віддам тварину", "Продам тварину", "Знайдена тварина",
-           "Загублена тварина", "Потрібна допомога ")
-    await message.answer("Оберіть тематику оголошення:", reply_markup=kb)
 
+
+# -------------------
+# Створення оголошення
+# -------------------
 @dp.message_handler(state=AdForm.category)
-async def process_category(message: types.Message, state: FSMContext):
+async def ad_category(message: types.Message, state: FSMContext):
     await state.update_data(category=message.text)
+    await message.answer("📍 Вкажіть район:")
     await AdForm.next()
-    kb = ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.add("Центр", "Лівий берег", "Правий берег")
-    await message.answer("Оберіть район:", reply_markup=kb)
+
 
 @dp.message_handler(state=AdForm.district)
-async def process_district(message: types.Message, state: FSMContext):
+async def ad_district(message: types.Message, state: FSMContext):
     await state.update_data(district=message.text)
+    await message.answer("🏷 Введіть заголовок (до 200 символів):")
     await AdForm.next()
-    await message.answer("Введіть заголовок (до 200 символів):", reply_markup=ReplyKeyboardRemove())
+
 
 @dp.message_handler(state=AdForm.title)
-async def process_title(message: types.Message, state: FSMContext):
+async def ad_title(message: types.Message, state: FSMContext):
     if len(message.text) > 200:
-        await message.answer("❌ Заголовок занадто довгий (макс 200 символів)")
-        return
-    valid, error = validate_input(message.text)
-    if not valid:
-        await message.answer(error)
-        return
+        return await message.answer("❌ Заголовок занадто довгий, максимум 200 символів")
     await state.update_data(title=message.text)
+    await message.answer("📝 Введіть опис (до 2000 символів):")
     await AdForm.next()
-    await message.answer("Введіть опис (до 2000 символів):")
+
 
 @dp.message_handler(state=AdForm.description)
-async def process_description(message: types.Message, state: FSMContext):
+async def ad_description(message: types.Message, state: FSMContext):
     if len(message.text) > 2000:
-        await message.answer("❌ Опис занадто довгий (макс 2000 символів)")
-        return
-    valid, error = validate_input(message.text)
-    if not valid:
-        await message.answer(error)
-        return
+        return await message.answer("❌ Опис занадто довгий, максимум 2000 символів")
     await state.update_data(description=message.text)
+    await message.answer("📸 Надішліть до 20 фото (або /skip щоб пропустити):")
     await AdForm.next()
-    await message.answer("Надішліть фото (до 20 шт). Якщо без фото — напишіть 'Пропустити'.")
 
-@dp.message_handler(content_types=["photo", "text"], state=AdForm.photos)
-async def process_photos(message: types.Message, state: FSMContext):
+
+@dp.message_handler(lambda m: m.text == "/skip", state=AdForm.photos)
+async def skip_photos(message: types.Message, state: FSMContext):
+    await state.update_data(photos="")
+    await message.answer("📞 Вкажіть контакти (до 200 символів):")
+    await AdForm.next()
+
+
+@dp.message_handler(content_types=types.ContentTypes.PHOTO, state=AdForm.photos)
+async def ad_photos(message: types.Message, state: FSMContext):
     data = await state.get_data()
-    photos = data.get("photos", "")
-    if message.content_type == "photo":
-        file_id = message.photo[-1].file_id
-        photos = (photos + "," + file_id).strip(",")
-        await state.update_data(photos=photos)
-        await message.answer("Фото додано ✅ Можете надіслати ще або напишіть 'Готово'.")
-    elif message.text.lower() in ["готово", "пропустити"]:
-        await AdForm.next()
-        await message.answer("Введіть контактну інформацію (до 200 символів):")
+    photos = data.get("photos", "").split(",") if data.get("photos") else []
+    if len(photos) >= 20:
+        return await message.answer("❌ Максимум 20 фото")
+    photos.append(message.photo[-1].file_id)
+    await state.update_data(photos=",".join(photos))
+    await message.answer("Фото додано ✅. Можете надіслати ще або /skip")
+
 
 @dp.message_handler(state=AdForm.contacts)
-async def process_contacts(message: types.Message, state: FSMContext):
+async def ad_contacts(message: types.Message, state: FSMContext):
     if len(message.text) > 200:
-        await message.answer("❌ Контакти занадто довгі (макс 200 символів)")
-        return
-    valid, error = validate_input(message.text)
-    if not valid:
-        await message.answer(error)
-        return
+        return await message.answer("❌ Контакти занадто довгі, максимум 200 символів")
 
     await state.update_data(contacts=message.text)
     data = await state.get_data()
+
+    # Зберігаємо в БД
     cursor.execute("""
         INSERT INTO ads (user_id, category, district, title, description, photos, contacts)
         VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -197,44 +155,142 @@ async def process_contacts(message: types.Message, state: FSMContext):
         data["contacts"]
     ))
     conn.commit()
-    await message.answer("✅ Ваше оголошення збережено!")
+    ad_id = cursor.lastrowid
+
+    # Формуємо текст
+    ad_text = (
+        f"📢 НОВЕ ОГОЛОШЕННЯ #{ad_id}\n\n"
+        f"🔹 Категорія: {data['category']}\n"
+        f"📍 Район: {data['district']}\n"
+        f"🏷 Заголовок: {data['title']}\n"
+        f"📝 Опис: {data['description']}\n"
+        f"📞 Контакти: {data['contacts']}\n"
+    )
+
+    # Відправляємо в групу модераторів
+    if data.get("photos"):
+        photos = data["photos"].split(",")
+        media = [InputMediaPhoto(media=p) for p in photos]
+        media[0].caption = ad_text
+        msg = await bot.send_media_group(MODERATORS_CHAT_ID, media=media)
+        # кнопки прикріплюємо окремо
+        sent = await bot.send_message(MODERATORS_CHAT_ID, f"⬆️ Оголошення #{ad_id}", reply_markup=get_moder_keyboard(ad_id))
+        moder_message_id = sent.message_id
+    else:
+        msg = await bot.send_message(MODERATORS_CHAT_ID, ad_text, reply_markup=get_moder_keyboard(ad_id))
+        moder_message_id = msg.message_id
+
+    # Зберігаємо message_id для видалення
+    cursor.execute("UPDATE ads SET moder_message_id=? WHERE id=?", (moder_message_id, ad_id))
+    conn.commit()
+
+    await message.answer("✅ Ваше оголошення надіслано на модерацію")
     await state.finish()
 
-# -------------------------------
-# 🔹 FastAPI endpoints
-# -------------------------------
-@app.on_event("startup")
-async def on_startup():
-    await bot.set_webhook(WEBHOOK_URL)
 
-@app.post(WEBHOOK_PATH)
-async def webhook(request: Request):
-    data = await request.json()
-    update = types.Update.to_object(data)
-    from aiogram import Bot
-    Bot.set_current(bot)
-    Dispatcher.set_current(dp)
-    await dp.process_update(update)
-    return {"ok": True}
+# -------------------
+# Модерація: Публікація
+# -------------------
+@dp.callback_query_handler(lambda c: c.data.startswith("publish_"))
+async def process_publish(callback_query: types.CallbackQuery):
+    ad_id = int(callback_query.data.split("_")[1])
 
+    cursor.execute("UPDATE ads SET is_published=1 WHERE id=?", (ad_id,))
+    conn.commit()
+
+    cursor.execute("SELECT * FROM ads WHERE id=?", (ad_id,))
+    ad = cursor.fetchone()
+    columns = [desc[0] for desc in cursor.description]
+    ad_dict = dict(zip(columns, ad))
+
+    ad_text = (
+        f"📢 ОГОЛОШЕННЯ\n\n"
+        f"🔹 Категорія: {ad_dict['category']}\n"
+        f"📍 Район: {ad_dict['district']}\n"
+        f"🏷 Заголовок: {ad_dict['title']}\n"
+        f"📝 Опис: {ad_dict['description']}\n"
+        f"📞 Контакти: {ad_dict['contacts']}\n"
+    )
+
+    if ad_dict["photos"]:
+        photos = ad_dict["photos"].split(",")
+        media = [InputMediaPhoto(media=p) for p in photos]
+        media[0].caption = ad_text
+        await bot.send_media_group(PUBLISH_CHAT_ID, media=media)
+    else:
+        await bot.send_message(PUBLISH_CHAT_ID, ad_text)
+
+    try:
+        await bot.delete_message(MODERATORS_CHAT_ID, ad_dict["moder_message_id"])
+    except:
+        pass
+
+    await callback_query.answer("Оголошення опубліковано ✅")
+
+
+# -------------------
+# Модерація: Відхилення
+# -------------------
+@dp.callback_query_handler(lambda c: c.data.startswith("reject_"))
+async def process_reject(callback_query: types.CallbackQuery, state: FSMContext):
+    ad_id = int(callback_query.data.split("_")[1])
+    await state.update_data(ad_id=ad_id)
+    await RejectAd.waiting_reason.set()
+    await bot.send_message(callback_query.message.chat.id, f"Введіть причину відхилення оголошення #{ad_id}:")
+    await callback_query.answer("Очікую причину...")
+
+
+@dp.message_handler(state=RejectAd.waiting_reason, content_types=types.ContentTypes.TEXT)
+async def reject_reason(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    ad_id = data["ad_id"]
+    reason = message.text.strip()
+
+    cursor.execute("UPDATE ads SET is_rejected=1, rejection_reason=? WHERE id=?", (reason, ad_id))
+    conn.commit()
+
+    cursor.execute("SELECT user_id, moder_message_id FROM ads WHERE id=?", (ad_id,))
+    row = cursor.fetchone()
+    user_id, moder_message_id = row
+
+    await bot.send_message(user_id, f"❌ Ваше оголошення #{ad_id} відхилено.\nПричина: {reason}")
+
+    try:
+        await bot.delete_message(MODERATORS_CHAT_ID, moder_message_id)
+    except:
+        pass
+
+    await message.answer(f"Причину відхилення #{ad_id} збережено ✅")
+    await state.finish()
+
+
+# -------------------
+# FastAPI endpoint
+# -------------------
 @app.get("/ads")
 async def get_ads():
     cursor.execute("SELECT * FROM ads")
-    rows = cursor.fetchall()
+    ads = cursor.fetchall()
     columns = [desc[0] for desc in cursor.description]
-    ads = [dict(zip(columns, row)) for row in rows]
-    return {"ads": ads}
+    return {"ads": [dict(zip(columns, ad)) for ad in ads]}
 
-@app.get("/users")
-async def get_users():
-    cursor.execute("SELECT * FROM users")
-    rows = cursor.fetchall()
-    columns = [desc[0] for desc in cursor.description]
-    users = [dict(zip(columns, row)) for row in rows]
-    return {"users": users}
 
-# -------------------------------
-# 🔹 Локальний запуск (dev)
-# -------------------------------
+# -------------------
+# Запуск
+# -------------------
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
+    import asyncio
+    from aiogram import executor
+
+    loop = asyncio.get_event_loop()
+
+    async def start_bot():
+        executor.start_polling(dp, skip_updates=True)
+
+    async def start_api():
+        config = uvicorn.Config(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
+        server = uvicorn.Server(config)
+        await server.serve()
+
+    loop.create_task(start_bot())
+    loop.run_until_complete(start_api())
