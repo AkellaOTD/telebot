@@ -288,11 +288,27 @@ async def process_contacts(message: types.Message, state: FSMContext):
 
     kb = get_moder_keyboard(ad_id, message.from_user.id, message.from_user.username)
 
+    # Шукаємо гілку для модерації
+    cursor.execute("""
+        SELECT chat_id, thread_id FROM threads
+        WHERE title=? AND chat_id=?
+    """, (data["category"], int(os.getenv("MODERATORS_CHAT_ID"))))
+    row = cursor.fetchone()
+
+    if not row:
+        await message.answer("❌ Для цієї категорії не знайдено гілки у групі модераторів")
+        return
+
+    moder_chat_id, moder_thread_id = row
+
+    # Відправляємо у відповідну гілку
     msg = await bot.send_message(
-        chat_id=int(os.getenv("MODERATORS_CHAT_ID")),
+        chat_id=moder_chat_id,
+        message_thread_id=moder_thread_id,
         text=moder_text,
         reply_markup=kb
     )
+
     cursor.execute("UPDATE ads SET moder_message_id=? WHERE id=?", (msg.message_id, ad_id))
     conn.commit()
 
