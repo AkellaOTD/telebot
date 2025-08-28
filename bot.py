@@ -321,7 +321,14 @@ async def save_reject_reason(message: types.Message, state: FSMContext):
     cursor.execute("SELECT user_id FROM ads WHERE id=?", (ad_id,))
     user_id = cursor.fetchone()[0]
 
-    await bot.send_message(user_id, f"❌ Ваше оголошення #{ad_id} було відхилено.\nПричина: {reason}")
+    kb = ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.add("📢 Подати оголошення")
+
+    await bot.send_message(
+        user_id,
+        f"❌ Ваше оголошення #{ad_id} було відхилено.\nПричина: {reason}",
+        reply_markup=kb
+    )
     await message.answer("Оголошення відхилено ✅")
     await state.finish()
 
@@ -377,7 +384,14 @@ async def process_publish(callback_query: types.CallbackQuery):
             reply_markup=pub_kb
         )
 
-    await bot.send_message(user_id, "✅ Ваше оголошення успішно опубліковане!")
+    kb = ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.add("📢 Подати оголошення")
+
+    await bot.send_message(
+        user_id,
+        "✅ Ваше оголошення успішно опубліковане!",
+        reply_markup=kb
+    )
     await callback_query.answer("Оголошення опубліковане ✅")
 
 # -------------------------------
