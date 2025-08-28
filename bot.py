@@ -327,22 +327,32 @@ async def save_reject_reason(message: types.Message, state: FSMContext):
     ad_id = data["ad_id"]
     reason = message.text
 
+    # Оновлюємо БД
     cursor.execute("UPDATE ads SET is_rejected=1, rejection_reason=? WHERE id=?", (reason, ad_id))
     conn.commit()
 
     cursor.execute("SELECT user_id FROM ads WHERE id=?", (ad_id,))
-    user_id = cursor.fetchone()[0]
+    row = cursor.fetchone()
+    if not row:
+        await message.answer(f"⚠️ Оголошення #{ad_id} не знайдено в БД.")
+        await state.finish()
+        return
+
+    user_id = row[0]
 
     kb = ReplyKeyboardMarkup(resize_keyboard=True)
     kb.add("📢 Подати оголошення")
 
-    await bot.send_message(
-        user_id,
-        f"❌ Ваше оголошення #{ad_id} було відхилено.\nПричина: {reason}",
-        reply_markup=kb
-    )
+    try:
+        await bot.send_message(
+            user_id,
+            f"❌ Ваше оголошення #{ad_id} було відхилено.\nПричина: {reason}",
+            reply_markup=kb
+        )
+        await message.answer(f"✅ Причина для оголошення #{ad_id} збережена. Повідомлення користувачу надіслано.")
+    except Exception as e:
+        await message.answer(f"⚠️ Не вдалося повідомити користувача (ID: {user_id}).\nПомилка: {e}")
 
-    await message.answer(f"✅ Причина для оголошення #{ad_id} збережена")
     await state.finish()
 
 @dp.callback_query_handler(lambda c: c.data.startswith("publish_"))
