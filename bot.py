@@ -6,13 +6,7 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
-from aiogram.types import (
-    ReplyKeyboardMarkup, 
-    ReplyKeyboardRemove, 
-    InlineKeyboardMarkup, 
-    InlineKeyboardButton, 
-    ForceReply
-)
+from aiogram.types import ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton
 import uvicorn
 
 # -------------------------------
@@ -101,16 +95,6 @@ def get_moder_keyboard(ad_id: int, user_id: int, username: str | None):
         kb.add(InlineKeyboardButton(f"👤 @{username}", url=f"https://t.me/{username}"))
     else:
         kb.add(InlineKeyboardButton("👤 Профіль", url=f"tg://user?id={user_id}"))
-    return kb
-
-def get_reject_reasons_keyboard(ad_id: int):
-    kb = InlineKeyboardMarkup(row_width=1)
-    kb.add(
-        InlineKeyboardButton("❌ Заборонені слова", callback_data=f"reason_{ad_id}_banned"),
-        InlineKeyboardButton("❌ Є посилання", callback_data=f"reason_{ad_id}_links"),
-        InlineKeyboardButton("❌ Недостатньо інформації", callback_data=f"reason_{ad_id}_info"),
-        InlineKeyboardButton("❌ Інше", callback_data=f"reason_other_{ad_id}")
-    )
     return kb
 
 def get_user_button(user_id: int, username: str | None):
@@ -322,26 +306,31 @@ async def process_contacts(message: types.Message, state: FSMContext):
 @dp.callback_query_handler(lambda c: c.data.startswith("reject_"))
 async def process_reject(callback_query: types.CallbackQuery):
     ad_id = int(callback_query.data.split("_")[1])
-    await bot.send_message(
-        chat_id=callback_query.message.chat.id,
-        text=f"❌ Оберіть причину відхилення для оголошення #{ad_id}:",
-        reply_markup=get_reject_reasons_keyboard(ad_id)
+
+    kb = InlineKeyboardMarkup(row_width=1)
+    kb.add(
+        InlineKeyboardButton("❌ Заборонені слова", callback_data=f"reason_banned_{ad_id}"),
+        InlineKeyboardButton("❌ Є посилання", callback_data=f"reason_link_{ad_id}"),
+        InlineKeyboardButton("❌ Недостатньо інформації", callback_data=f"reason_info_{ad_id}")
+    )
+
+    await callback_query.message.answer(
+        f"Виберіть причину відхилення для оголошення #{ad_id}:",
+        reply_markup=kb
     )
     await callback_query.answer()
 
-# Автоматичні причини
-@dp.callback_query_handler(lambda c: c.data.startswith("reason_") and not c.data.startswith("reason_other"))
-async def process_quick_reject(callback_query: types.CallbackQuery):
+@dp.callback_query_handler(lambda c: c.data.startswith("reason_"))
+async def process_reject_reason(callback_query: types.CallbackQuery):
     parts = callback_query.data.split("_")
-    ad_id = int(parts[1])
-    reason_code = parts[2]
+    reason_type, ad_id = parts[1], int(parts[2])
 
-    reasons_map = {
-        "banned": "Оголошення містить заборонені слова",
-        "links": "Оголошення містить посилання",
+    reasons = {
+        "banned": "Містить заборонені слова",
+        "link": "Є посилання",
         "info": "Недостатньо інформації"
     }
-    reason = reasons_map.get(reason_code, "Відхилено")
+    reason = reasons.get(reason_type, "Відхилено")
 
     cursor.execute("UPDATE ads SET is_rejected=1, rejection_reason=? WHERE id=?", (reason, ad_id))
     conn.commit()
@@ -360,45 +349,6 @@ async def process_quick_reject(callback_query: types.CallbackQuery):
     await callback_query.message.answer(f"✅ Оголошення #{ad_id} відхилено. Причина: {reason}")
     await callback_query.answer()
 
-# Ручна причина
-pending_rejections = {}
-
-pending_rejections = {}
-
-@dp.callback_query_handler(lambda c: c.data.startswith("reason_other_"))
-async def process_reject_reason_other(callback_query: types.CallbackQuery):
-    ad_id = int(callback_query.data.split("_")[2])
-    pending_rejections[callback_query.from_user.id] = ad_id
-
-    await bot.send_message(
-        chat_id=callback_query.message.chat.id,
-        text=f"✏️ Введіть причину відхилення для оголошення #{ad_id} звичайним повідомленням у цей чат."
-    )
-    await callback_query.answer()
-
-@dp.message_handler(lambda msg: msg.from_user.id in pending_rejections)
-async def save_custom_reject_reason(message: types.Message):
-    ad_id = pending_rejections.pop(message.from_user.id)
-    reason = message.text
-
-    cursor.execute("UPDATE ads SET is_rejected=1, rejection_reason=? WHERE id=?", (reason, ad_id))
-    conn.commit()
-
-    cursor.execute("SELECT user_id FROM ads WHERE id=?", (ad_id,))
-    user_id = cursor.fetchone()[0]
-
-    kb = ReplyKeyboardMarkup(resize_keyboard=True).add("📢 Подати оголошення")
-
-    await bot.send_message(
-        user_id,
-        f"❌ Ваше оголошення #{ad_id} було відхилено.\nПричина: {reason}",
-        reply_markup=kb
-    )
-
-    await message.answer(f"✅ Оголошення #{ad_id} відхилено. Причина: {reason}")
-# -------------------------------
-# 🔹 Опублікувати
-# -------------------------------
 @dp.callback_query_handler(lambda c: c.data.startswith("publish_"))
 async def process_publish(callback_query: types.CallbackQuery):
     ad_id = int(callback_query.data.split("_")[1])
@@ -451,7 +401,8 @@ async def process_publish(callback_query: types.CallbackQuery):
             reply_markup=pub_kb
         )
 
-    kb = ReplyKeyboardMarkup(resize_keyboard=True).add("📢 Подати оголошення")
+    kb = ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.add("📢 Подати оголошення")
 
     await bot.send_message(
         user_id,
