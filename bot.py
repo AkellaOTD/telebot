@@ -48,9 +48,10 @@ CREATE TABLE IF NOT EXISTS ads (
     description TEXT,
     photos TEXT,
     contacts TEXT,
-    is_published BOOLEAN DEFAULT 0,
-    is_rejected BOOLEAN DEFAULT 0,
-    rejection_reason TEXT
+    is_published INTEGER DEFAULT 0,
+    is_rejected INTEGER DEFAULT 0,
+    rejection_reason TEXT,
+    moder_message_id INTEGER
 )
 """)
 conn.commit()
