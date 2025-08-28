@@ -412,6 +412,49 @@ async def process_publish(callback_query: types.CallbackQuery):
     await callback_query.answer("Оголошення опубліковане ✅")
 
 # -------------------------------
+# 🔹 База даних (додамо таблицю groups)
+# -------------------------------
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS groups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat_id INTEGER UNIQUE,
+    title TEXT,
+    type TEXT
+)
+""")
+conn.commit()
+
+# -------------------------------
+# 🔹 Хендлер для групових чатів
+# -------------------------------
+@dp.message_handler(content_types=types.ContentTypes.ANY, chat_type=[types.ChatType.GROUP, types.ChatType.SUPERGROUP])
+async def group_logger(message: types.Message):
+    chat_id = message.chat.id
+    chat_title = message.chat.title or "Без назви"
+    chat_type = message.chat.type
+
+    # Записуємо або оновлюємо дані про групу
+    cursor.execute("""
+        INSERT INTO groups (chat_id, title, type)
+        VALUES (?, ?, ?)
+        ON CONFLICT(chat_id) DO UPDATE SET title=excluded.title, type=excluded.type
+    """, (chat_id, chat_title, chat_type))
+    conn.commit()
+
+    # Відповідаємо тільки якщо прямо тегнули бота
+    if message.is_mention:
+        await message.reply(f"✅ Цю групу збережено: {chat_title} (ID: {chat_id})")
+
+# -------------------------------
+# 🔹 FastAPI endpoint для перегляду груп
+# -------------------------------
+@app.get("/groups")
+async def get_groups():
+    cursor.execute("SELECT chat_id, title, type FROM groups")
+    groups = cursor.fetchall()
+    return {"groups": [{"chat_id": g[0], "title": g[1], "type": g[2]} for g in groups]}
+    
+# -------------------------------
 # 🔹 FastAPI endpoints
 # -------------------------------
 @app.on_event("startup")
