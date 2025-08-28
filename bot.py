@@ -1,4 +1,4 @@
-from fastapi import HTTPException, FastAPI, Request
+from fastapi import FastAPI, Request
 import os
 import re
 import sqlite3
@@ -6,7 +6,13 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
-from aiogram.types import ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton, ForceReply
+from aiogram.types import (
+    ReplyKeyboardMarkup, 
+    ReplyKeyboardRemove, 
+    InlineKeyboardMarkup, 
+    InlineKeyboardButton, 
+    ForceReply
+)
 import uvicorn
 
 # -------------------------------
@@ -59,8 +65,6 @@ conn.commit()
 # -------------------------------
 # 🔹 FSM
 # -------------------------------
-
-
 class AdForm(StatesGroup):
     category = State()
     district = State()
@@ -69,17 +73,11 @@ class AdForm(StatesGroup):
     photos = State()
     contacts = State()
 
-
-class RejectAd(StatesGroup):
-    reason = State()
-
-
 # -------------------------------
 # 🔹 Фільтр тексту
 # -------------------------------
 BANNED_WORDS = os.getenv("BANNED_WORDS", "").split(",")
 BANNED_WORDS = [w.strip().lower() for w in BANNED_WORDS if w.strip()]
-
 
 def validate_input(text: str) -> tuple[bool, str]:
     if re.search(r"(http[s]?://|www\.|t\.me/)", text, re.IGNORECASE):
@@ -93,8 +91,6 @@ def validate_input(text: str) -> tuple[bool, str]:
 # -------------------------------
 # 🔹 Допоміжні кнопки
 # -------------------------------
-
-
 def get_moder_keyboard(ad_id: int, user_id: int, username: str | None):
     kb = InlineKeyboardMarkup(row_width=2)
     kb.add(
@@ -107,6 +103,15 @@ def get_moder_keyboard(ad_id: int, user_id: int, username: str | None):
         kb.add(InlineKeyboardButton("👤 Профіль", url=f"tg://user?id={user_id}"))
     return kb
 
+def get_reject_reasons_keyboard(ad_id: int):
+    kb = InlineKeyboardMarkup(row_width=1)
+    kb.add(
+        InlineKeyboardButton("❌ Заборонені слова", callback_data=f"reason_{ad_id}_banned"),
+        InlineKeyboardButton("❌ Є посилання", callback_data=f"reason_{ad_id}_links"),
+        InlineKeyboardButton("❌ Недостатньо інформації", callback_data=f"reason_{ad_id}_info"),
+        InlineKeyboardButton("❌ Інше", callback_data=f"reason_other_{ad_id}")
+    )
+    return kb
 
 def get_user_button(user_id: int, username: str | None):
     if username:
@@ -117,12 +122,9 @@ def get_user_button(user_id: int, username: str | None):
 # -------------------------------
 # 🔹 /start
 # -------------------------------
-
-
 @dp.message_handler(commands="start")
 async def cmd_start(message: types.Message):
-    cursor.execute(
-        "SELECT accepted_rules FROM users WHERE user_id = ?", (message.from_user.id,))
+    cursor.execute("SELECT accepted_rules FROM users WHERE user_id = ?", (message.from_user.id,))
     user = cursor.fetchone()
 
     if user and user[0]:
@@ -136,12 +138,11 @@ async def cmd_start(message: types.Message):
         reply_markup=kb
     )
 
-
 @dp.message_handler(lambda msg: msg.text in ["✅ Погоджуюсь", "❌ Не погоджуюсь"])
 async def rules_answer(message: types.Message):
     if message.text == "✅ Погоджуюсь":
         cursor.execute(
-            "INSERT OR REPLACE INTO users (user_id, accepted_rules) VALUES (?, ?)",
+            "INSERT OR REPLACE INTO users (user_id, accepted_rules) VALUES (?, ?)", 
             (message.from_user.id, True)
         )
         conn.commit()
@@ -152,20 +153,16 @@ async def rules_answer(message: types.Message):
 # -------------------------------
 # 🔹 Обробник кнопки "Подати оголошення"
 # -------------------------------
-
-
 @dp.message_handler(lambda msg: msg.text == "📢 Подати оголошення")
 async def handle_new_ad_button(message: types.Message, state: FSMContext):
     await cmd_create(message, state)
+
 # -------------------------------
 # 🔹 /create (FSM)
 # -------------------------------
-
-
 @dp.message_handler(commands="create")
 async def cmd_create(message: types.Message, state: FSMContext):
-    cursor.execute(
-        "SELECT accepted_rules FROM users WHERE user_id = ?", (message.from_user.id,))
+    cursor.execute("SELECT accepted_rules FROM users WHERE user_id = ?", (message.from_user.id,))
     user = cursor.fetchone()
     if not user or not user[0]:
         await message.answer("⚠️ Спершу потрібно погодитись із правилами! Натисніть /start")
@@ -173,10 +170,8 @@ async def cmd_create(message: types.Message, state: FSMContext):
 
     await AdForm.category.set()
     kb = ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.add("Віддам тварину", "Продам тварину", "Знайдена тварина",
-           "Загублена тварина", "Потрібна допомога ")
+    kb.add("Віддам тварину", "Продам тварину", "Знайдена тварина", "Загублена тварина", "Потрібна допомога ")
     await message.answer("Оберіть тематику оголошення:", reply_markup=kb)
-
 
 @dp.message_handler(state=AdForm.category)
 async def process_category(message: types.Message, state: FSMContext):
@@ -186,13 +181,11 @@ async def process_category(message: types.Message, state: FSMContext):
     kb.add("Центр", "Лівий берег", "Правий берег")
     await message.answer("Оберіть район:", reply_markup=kb)
 
-
 @dp.message_handler(state=AdForm.district)
 async def process_district(message: types.Message, state: FSMContext):
     await state.update_data(district=message.text)
     await AdForm.next()
     await message.answer("Введіть заголовок (до 200 символів):", reply_markup=ReplyKeyboardRemove())
-
 
 @dp.message_handler(state=AdForm.title)
 async def process_title(message: types.Message, state: FSMContext):
@@ -206,7 +199,6 @@ async def process_title(message: types.Message, state: FSMContext):
     await state.update_data(title=message.text)
     await AdForm.next()
     await message.answer("Введіть опис (до 2000 символів):")
-
 
 @dp.message_handler(state=AdForm.description)
 async def process_description(message: types.Message, state: FSMContext):
@@ -223,7 +215,6 @@ async def process_description(message: types.Message, state: FSMContext):
     kb = ReplyKeyboardMarkup(resize_keyboard=True)
     kb.add("Пропустити")
     await message.answer("Надішліть фото (до 20 шт). Якщо без фото — натисніть «Пропустити».", reply_markup=kb)
-
 
 @dp.message_handler(content_types=["photo", "text"], state=AdForm.photos)
 async def process_photos(message: types.Message, state: FSMContext):
@@ -246,7 +237,6 @@ async def process_photos(message: types.Message, state: FSMContext):
     elif message.text.lower() == "готово":
         await AdForm.next()
         await message.answer("Введіть контактну інформацію (до 200 символів):", reply_markup=ReplyKeyboardRemove())
-
 
 @dp.message_handler(state=AdForm.contacts)
 async def process_contacts(message: types.Message, state: FSMContext):
@@ -283,7 +273,6 @@ async def process_contacts(message: types.Message, state: FSMContext):
     cursor.execute("SELECT last_insert_rowid()")
     ad_id = cursor.fetchone()[0]
 
-    # Надсилаємо в групу модераторів
     moder_text = (
         f"📢 НОВЕ ОГОЛОШЕННЯ #{ad_id}\n\n"
         f"👤 Користувач: {message.from_user.first_name or ''} "
@@ -295,8 +284,7 @@ async def process_contacts(message: types.Message, state: FSMContext):
         f"📞 Контакти: {data['contacts']}\n"
     )
 
-    kb = get_moder_keyboard(ad_id, message.from_user.id,
-                            message.from_user.username)
+    kb = get_moder_keyboard(ad_id, message.from_user.id, message.from_user.username)
 
     if data.get("photos"):
         photos = data["photos"].split(",")
@@ -322,8 +310,7 @@ async def process_contacts(message: types.Message, state: FSMContext):
             reply_markup=kb
         )
 
-    cursor.execute("UPDATE ads SET moder_message_id=? WHERE id=?",
-                   (msg.message_id, ad_id))
+    cursor.execute("UPDATE ads SET moder_message_id=? WHERE id=?", (msg.message_id, ad_id))
     conn.commit()
 
     await message.answer("✅ Ваше оголошення збережено та передано на модерацію!", reply_markup=ReplyKeyboardRemove())
@@ -332,92 +319,72 @@ async def process_contacts(message: types.Message, state: FSMContext):
 # -------------------------------
 # 🔹 Модерація
 # -------------------------------
-
-
 @dp.callback_query_handler(lambda c: c.data.startswith("reject_"))
 async def process_reject(callback_query: types.CallbackQuery):
     ad_id = int(callback_query.data.split("_")[1])
-
-    kb = InlineKeyboardMarkup(row_width=1)
-    kb.add(
-        InlineKeyboardButton("❌ Заборонені слова", callback_data=f"reason_words_{ad_id}"),
-        InlineKeyboardButton("❌ Є посилання", callback_data=f"reason_links_{ad_id}"),
-        InlineKeyboardButton("❌ Недостатньо інформації", callback_data=f"reason_info_{ad_id}"),
-        InlineKeyboardButton("❌ Інше", callback_data=f"reason_other_{ad_id}")
-    )
-
-    await callback_query.message.reply(
-        f"Оберіть причину відхилення для оголошення #{ad_id}:",
-        reply_markup=kb
+    await bot.send_message(
+        chat_id=callback_query.message.chat.id,
+        text=f"❌ Оберіть причину відхилення для оголошення #{ad_id}:",
+        reply_markup=get_reject_reasons_keyboard(ad_id)
     )
     await callback_query.answer()
 
-
-# Обробка вибору готових причин
-@dp.callback_query_handler(lambda c: c.data.startswith("reason_"))
-async def process_reject_reason_choice(callback_query: types.CallbackQuery):
+# Автоматичні причини
+@dp.callback_query_handler(lambda c: c.data.startswith("reason_") and not c.data.startswith("reason_other"))
+async def process_quick_reject(callback_query: types.CallbackQuery):
     parts = callback_query.data.split("_")
-    reason_type, ad_id = parts[1], int(parts[2])
+    ad_id = int(parts[1])
+    reason_code = parts[2]
 
-    reasons = {
-        "words": "Текст містить заборонені слова",
-        "links": "Текст містить посилання",
-        "info": "Недостатньо інформації",
+    reasons_map = {
+        "banned": "Оголошення містить заборонені слова",
+        "links": "Оголошення містить посилання",
+        "info": "Недостатньо інформації"
     }
+    reason = reasons_map.get(reason_code, "Відхилено")
 
-    if reason_type in reasons:
-        reason = reasons[reason_type]
+    cursor.execute("UPDATE ads SET is_rejected=1, rejection_reason=? WHERE id=?", (reason, ad_id))
+    conn.commit()
 
-        cursor.execute(
-            "UPDATE ads SET is_rejected=1, rejection_reason=? WHERE id=?", (reason, ad_id))
-        conn.commit()
+    cursor.execute("SELECT user_id FROM ads WHERE id=?", (ad_id,))
+    user_id = cursor.fetchone()[0]
 
-        cursor.execute("SELECT user_id FROM ads WHERE id=?", (ad_id,))
-        user_id = cursor.fetchone()[0]
+    kb = ReplyKeyboardMarkup(resize_keyboard=True).add("📢 Подати оголошення")
 
-        kb = ReplyKeyboardMarkup(resize_keyboard=True).add(
-            "📢 Подати оголошення")
+    await bot.send_message(
+        user_id,
+        f"❌ Ваше оголошення #{ad_id} було відхилено.\nПричина: {reason}",
+        reply_markup=kb
+    )
 
-        await bot.send_message(
-            user_id,
-            f"❌ Ваше оголошення #{ad_id} було відхилено.\nПричина: {reason}",
-            reply_markup=kb
-        )
+    await callback_query.message.answer(f"✅ Оголошення #{ad_id} відхилено. Причина: {reason}")
+    await callback_query.answer()
 
-        await callback_query.message.reply(f"✅ Оголошення #{ad_id} відхилено. Причина: {reason}")
-        await callback_query.answer()
-    else:
-        # Якщо натиснули "Інше"
-        await bot.send_message(
-            chat_id=callback_query.message.chat.id,
-            text=f"✏️ Введіть причину відхилення для оголошення #{ad_id}:",
-            reply_markup=ForceReply(selective=True)
-        )
-        # Запам'ятаємо, що чекаємо на текст
-        cursor.execute(
-            "UPDATE ads SET rejection_reason=? WHERE id=?", ("__pending__", ad_id))
-        conn.commit()
-        await callback_query.answer()
+# Ручна причина
+pending_rejections = {}
 
+@dp.callback_query_handler(lambda c: c.data.startswith("reason_other_"))
+async def process_reject_reason_other(callback_query: types.CallbackQuery):
+    ad_id = int(callback_query.data.split("_")[2])
+    pending_rejections[callback_query.message.message_id] = ad_id
 
-# Якщо модератор написав причину вручну
-@dp.message_handler(lambda msg: msg.reply_to_message and "Введіть причину відхилення" in msg.reply_to_message.text)
+    await bot.send_message(
+        chat_id=callback_query.message.chat.id,
+        text=f"✏️ Введіть причину відхилення для оголошення #{ad_id}:",
+        reply_markup=ForceReply(selective=True)
+    )
+    await callback_query.answer()
+
+@dp.message_handler(lambda msg: msg.reply_to_message and msg.reply_to_message.message_id in pending_rejections)
 async def save_custom_reject_reason(message: types.Message):
+    ad_id = pending_rejections.pop(message.reply_to_message.message_id)
     reason = message.text
 
-    # шукаємо оголошення, яке чекало на причину
-    cursor.execute(
-        "SELECT id, user_id FROM ads WHERE rejection_reason='__pending__' ORDER BY id DESC LIMIT 1")
-    row = cursor.fetchone()
-    if not row:
-        await message.answer("⚠️ Не знайдено оголошення для відмови.")
-        return
-
-    ad_id, user_id = row
-
-    cursor.execute(
-        "UPDATE ads SET is_rejected=1, rejection_reason=? WHERE id=?", (reason, ad_id))
+    cursor.execute("UPDATE ads SET is_rejected=1, rejection_reason=? WHERE id=?", (reason, ad_id))
     conn.commit()
+
+    cursor.execute("SELECT user_id FROM ads WHERE id=?", (ad_id,))
+    user_id = cursor.fetchone()[0]
 
     kb = ReplyKeyboardMarkup(resize_keyboard=True).add("📢 Подати оголошення")
 
@@ -429,13 +396,14 @@ async def save_custom_reject_reason(message: types.Message):
 
     await message.answer(f"✅ Оголошення #{ad_id} відхилено. Причина: {reason}")
 
-
+# -------------------------------
+# 🔹 Опублікувати
+# -------------------------------
 @dp.callback_query_handler(lambda c: c.data.startswith("publish_"))
 async def process_publish(callback_query: types.CallbackQuery):
     ad_id = int(callback_query.data.split("_")[1])
 
-    cursor.execute(
-        "SELECT user_id, username, first_name, category, district, title, description, photos, contacts FROM ads WHERE id=?", (ad_id,))
+    cursor.execute("SELECT user_id, username, first_name, category, district, title, description, photos, contacts FROM ads WHERE id=?", (ad_id,))
     ad = cursor.fetchone()
 
     if not ad:
@@ -483,8 +451,7 @@ async def process_publish(callback_query: types.CallbackQuery):
             reply_markup=pub_kb
         )
 
-    kb = ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.add("📢 Подати оголошення")
+    kb = ReplyKeyboardMarkup(resize_keyboard=True).add("📢 Подати оголошення")
 
     await bot.send_message(
         user_id,
@@ -496,12 +463,9 @@ async def process_publish(callback_query: types.CallbackQuery):
 # -------------------------------
 # 🔹 FastAPI endpoints
 # -------------------------------
-
-
 @app.on_event("startup")
 async def on_startup():
     await bot.set_webhook(WEBHOOK_URL)
-
 
 @app.post(WEBHOOK_PATH)
 async def webhook(request: Request):
