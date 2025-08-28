@@ -331,11 +331,38 @@ async def process_publish(callback_query: types.CallbackQuery):
     )
 
     # Надсилаємо у канал/групу публікацій
-    await bot.send_message(
-        chat_id=int(os.getenv("PUBLISH_CHAT_ID")),
-        text=pub_text
-    )
+     photos = None
+    cursor.execute("SELECT photos FROM ads WHERE id=?", (ad_id,))
+    row = cursor.fetchone()
+    if row and row[0]:
+        photos = row[0].split(",")
 
+    if photos:
+        if len(photos) == 1:
+            # Одне фото з підписом
+            await bot.send_photo(
+                chat_id=int(os.getenv("PUBLISH_CHAT_ID")),
+                photo=photos[0],
+                caption=pub_text
+            )
+        else:
+            # Альбом фото
+            media = [types.InputMediaPhoto(p) for p in photos[:10]]
+            await bot.send_media_group(
+                chat_id=int(os.getenv("PUBLISH_CHAT_ID")),
+                media=media
+            )
+            # Окремо текст
+            await bot.send_message(
+                chat_id=int(os.getenv("PUBLISH_CHAT_ID")),
+                text=pub_text
+            )
+    else:
+        # Без фото
+        await bot.send_message(
+            chat_id=int(os.getenv("PUBLISH_CHAT_ID")),
+            text=pub_text
+        )
     # Повідомляємо автора
     await bot.send_message(user_id, "✅ Ваше оголошення успішно опубліковане!")
 
