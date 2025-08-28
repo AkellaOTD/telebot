@@ -6,7 +6,7 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
-from aiogram.types import ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton, ForceReply
 import uvicorn
 
 # -------------------------------
@@ -305,7 +305,13 @@ async def process_reject(callback_query: types.CallbackQuery, state: FSMContext)
     ad_id = int(callback_query.data.split("_")[1])
     await state.update_data(ad_id=ad_id)
 
-    await bot.send_message(callback_query.from_user.id, "Введіть причину відхилення:")
+    # Питаємо причину прямо у групі
+    await bot.send_message(
+        chat_id=callback_query.message.chat.id,
+        text=f"✏️ Введіть причину відхилення для оголошення #{ad_id}:",
+        reply_markup=ForceReply(selective=True)
+    )
+
     await RejectAd.reason.set()
     await callback_query.answer()
 
@@ -329,7 +335,8 @@ async def save_reject_reason(message: types.Message, state: FSMContext):
         f"❌ Ваше оголошення #{ad_id} було відхилено.\nПричина: {reason}",
         reply_markup=kb
     )
-    await message.answer("Оголошення відхилено ✅")
+
+    await message.answer(f"✅ Причина для оголошення #{ad_id} збережена")
     await state.finish()
 
 @dp.callback_query_handler(lambda c: c.data.startswith("publish_"))
