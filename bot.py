@@ -224,12 +224,39 @@ async def process_contacts(message: types.Message, state: FSMContext):
         f"📞 Контакти: {data['contacts']}\n"
     )
 
-    msg = await bot.send_message(
-        chat_id=int(os.getenv("MODERATORS_CHAT_ID")),
-        text=moder_text,
-        reply_markup=get_moder_keyboard(ad_id)
-    )
+    photos = data.get("photos", "").split(",") if data.get("photos") else []
 
+    if photos:
+        if len(photos) == 1:
+            # Якщо одне фото
+            msg = await bot.send_photo(
+                chat_id=int(os.getenv("MODERATORS_CHAT_ID")),
+                photo=photos[0],
+                caption=moder_text,
+                reply_markup=get_moder_keyboard(ad_id)
+            )
+        else:
+            # Якщо кілька фото (альбом)
+            media = [types.InputMediaPhoto(p) for p in photos[:10]]  # Telegram дозволяє до 10 у медіагрупі
+            await bot.send_media_group(
+                chat_id=int(os.getenv("MODERATORS_CHAT_ID")),
+                media=media
+            )
+            # Текст + кнопки окремо
+            msg = await bot.send_message(
+                chat_id=int(os.getenv("MODERATORS_CHAT_ID")),
+                text=moder_text,
+                reply_markup=get_moder_keyboard(ad_id)
+            )
+    else:
+        # Якщо фото немає
+        msg = await bot.send_message(
+            chat_id=int(os.getenv("MODERATORS_CHAT_ID")),
+            text=moder_text,
+            reply_markup=get_moder_keyboard(ad_id)
+        )
+
+    # Зберігаємо id повідомлення для подальшого видалення
     cursor.execute("UPDATE ads SET moder_message_id=? WHERE id=?", (msg.message_id, ad_id))
     conn.commit()
 
