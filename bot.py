@@ -150,6 +150,13 @@ async def rules_answer(message: types.Message):
         await message.answer("👋 Добре, до зустрічі!", reply_markup=ReplyKeyboardRemove())
 
 # -------------------------------
+# 🔹 Обробник кнопки "Подати оголошення"
+# -------------------------------
+@dp.message_handler(lambda msg: msg.text == "📢 Подати оголошення")
+async def handle_new_ad_button(message: types.Message, state: FSMContext):
+    await cmd_create(message, state)
+
+# -------------------------------
 # 🔹 /create (FSM)
 # -------------------------------
 @dp.message_handler(commands="create")
