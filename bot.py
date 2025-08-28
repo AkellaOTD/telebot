@@ -363,7 +363,7 @@ async def process_publish(callback_query: types.CallbackQuery):
 
     pub_text = (
         f"📢 ОГОЛОШЕННЯ #{ad_id}\n\n"
-        f"👤 Користувач: {first_name or ''} (@{username}) [ID: {user_id}]\n\n"
+        f"👤 Користувач: {first_name or ''} (@{username})\n\n"
         f"🔹 Категорія: {category}\n"
         f"📍 Район: {district}\n"
         f"🏷 Заголовок: {title}\n"
