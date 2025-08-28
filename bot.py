@@ -59,6 +59,8 @@ conn.commit()
 # -------------------------------
 # 🔹 FSM
 # -------------------------------
+
+
 class AdForm(StatesGroup):
     category = State()
     district = State()
@@ -67,11 +69,13 @@ class AdForm(StatesGroup):
     photos = State()
     contacts = State()
 
+
 # -------------------------------
 # 🔹 Фільтр тексту
 # -------------------------------
 BANNED_WORDS = os.getenv("BANNED_WORDS", "").split(",")
 BANNED_WORDS = [w.strip().lower() for w in BANNED_WORDS if w.strip()]
+
 
 def validate_input(text: str) -> tuple[bool, str]:
     if re.search(r"(http[s]?://|www\.|t\.me/)", text, re.IGNORECASE):
@@ -85,6 +89,8 @@ def validate_input(text: str) -> tuple[bool, str]:
 # -------------------------------
 # 🔹 Допоміжні кнопки
 # -------------------------------
+
+
 def get_moder_keyboard(ad_id: int, user_id: int, username: str | None):
     kb = InlineKeyboardMarkup(row_width=2)
     kb.add(
@@ -97,6 +103,7 @@ def get_moder_keyboard(ad_id: int, user_id: int, username: str | None):
         kb.add(InlineKeyboardButton("👤 Профіль", url=f"tg://user?id={user_id}"))
     return kb
 
+
 def get_user_button(user_id: int, username: str | None):
     if username:
         return InlineKeyboardButton(f"👤 @{username}", url=f"https://t.me/{username}")
@@ -106,9 +113,12 @@ def get_user_button(user_id: int, username: str | None):
 # -------------------------------
 # 🔹 /start
 # -------------------------------
+
+
 @dp.message_handler(commands="start")
 async def cmd_start(message: types.Message):
-    cursor.execute("SELECT accepted_rules FROM users WHERE user_id = ?", (message.from_user.id,))
+    cursor.execute(
+        "SELECT accepted_rules FROM users WHERE user_id = ?", (message.from_user.id,))
     user = cursor.fetchone()
 
     if user and user[0]:
@@ -122,11 +132,12 @@ async def cmd_start(message: types.Message):
         reply_markup=kb
     )
 
+
 @dp.message_handler(lambda msg: msg.text in ["✅ Погоджуюсь", "❌ Не погоджуюсь"])
 async def rules_answer(message: types.Message):
     if message.text == "✅ Погоджуюсь":
         cursor.execute(
-            "INSERT OR REPLACE INTO users (user_id, accepted_rules) VALUES (?, ?)", 
+            "INSERT OR REPLACE INTO users (user_id, accepted_rules) VALUES (?, ?)",
             (message.from_user.id, True)
         )
         conn.commit()
@@ -137,6 +148,8 @@ async def rules_answer(message: types.Message):
 # -------------------------------
 # 🔹 Обробник кнопки "Подати оголошення"
 # -------------------------------
+
+
 @dp.message_handler(lambda msg: msg.text == "📢 Подати оголошення")
 async def handle_new_ad_button(message: types.Message, state: FSMContext):
     await cmd_create(message, state)
@@ -144,9 +157,12 @@ async def handle_new_ad_button(message: types.Message, state: FSMContext):
 # -------------------------------
 # 🔹 /create (FSM)
 # -------------------------------
+
+
 @dp.message_handler(commands="create")
 async def cmd_create(message: types.Message, state: FSMContext):
-    cursor.execute("SELECT accepted_rules FROM users WHERE user_id = ?", (message.from_user.id,))
+    cursor.execute(
+        "SELECT accepted_rules FROM users WHERE user_id = ?", (message.from_user.id,))
     user = cursor.fetchone()
     if not user or not user[0]:
         await message.answer("⚠️ Спершу потрібно погодитись із правилами! Натисніть /start")
@@ -154,8 +170,10 @@ async def cmd_create(message: types.Message, state: FSMContext):
 
     await AdForm.category.set()
     kb = ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.add("Віддам тварину", "Продам тварину", "Знайдена тварина", "Загублена тварина", "Потрібна допомога ")
+    kb.add("Віддам тварину", "Продам тварину", "Знайдена тварина",
+           "Загублена тварина", "Потрібна допомога ")
     await message.answer("Оберіть тематику оголошення:", reply_markup=kb)
+
 
 @dp.message_handler(state=AdForm.category)
 async def process_category(message: types.Message, state: FSMContext):
@@ -165,11 +183,13 @@ async def process_category(message: types.Message, state: FSMContext):
     kb.add("Центр", "Лівий берег", "Правий берег")
     await message.answer("Оберіть район:", reply_markup=kb)
 
+
 @dp.message_handler(state=AdForm.district)
 async def process_district(message: types.Message, state: FSMContext):
     await state.update_data(district=message.text)
     await AdForm.next()
     await message.answer("Введіть заголовок (до 200 символів):", reply_markup=ReplyKeyboardRemove())
+
 
 @dp.message_handler(state=AdForm.title)
 async def process_title(message: types.Message, state: FSMContext):
@@ -183,6 +203,7 @@ async def process_title(message: types.Message, state: FSMContext):
     await state.update_data(title=message.text)
     await AdForm.next()
     await message.answer("Введіть опис (до 2000 символів):")
+
 
 @dp.message_handler(state=AdForm.description)
 async def process_description(message: types.Message, state: FSMContext):
@@ -199,6 +220,7 @@ async def process_description(message: types.Message, state: FSMContext):
     kb = ReplyKeyboardMarkup(resize_keyboard=True)
     kb.add("Пропустити")
     await message.answer("Надішліть фото (до 20 шт). Якщо без фото — натисніть «Пропустити».", reply_markup=kb)
+
 
 @dp.message_handler(content_types=["photo", "text"], state=AdForm.photos)
 async def process_photos(message: types.Message, state: FSMContext):
@@ -221,6 +243,7 @@ async def process_photos(message: types.Message, state: FSMContext):
     elif message.text.lower() == "готово":
         await AdForm.next()
         await message.answer("Введіть контактну інформацію (до 200 символів):", reply_markup=ReplyKeyboardRemove())
+
 
 @dp.message_handler(state=AdForm.contacts)
 async def process_contacts(message: types.Message, state: FSMContext):
@@ -268,7 +291,8 @@ async def process_contacts(message: types.Message, state: FSMContext):
         f"📞 Контакти: {data['contacts']}\n"
     )
 
-    kb = get_moder_keyboard(ad_id, message.from_user.id, message.from_user.username)
+    kb = get_moder_keyboard(ad_id, message.from_user.id,
+                            message.from_user.username)
 
     if data.get("photos"):
         photos = data["photos"].split(",")
@@ -294,7 +318,8 @@ async def process_contacts(message: types.Message, state: FSMContext):
             reply_markup=kb
         )
 
-    cursor.execute("UPDATE ads SET moder_message_id=? WHERE id=?", (msg.message_id, ad_id))
+    cursor.execute("UPDATE ads SET moder_message_id=? WHERE id=?",
+                   (msg.message_id, ad_id))
     conn.commit()
 
     await message.answer("✅ Ваше оголошення збережено та передано на модерацію!", reply_markup=ReplyKeyboardRemove())
@@ -303,6 +328,8 @@ async def process_contacts(message: types.Message, state: FSMContext):
 # -------------------------------
 # 🔹 Модерація
 # -------------------------------
+
+
 @dp.callback_query_handler(lambda c: c.data.startswith("reject_"))
 async def process_reject(callback_query: types.CallbackQuery):
     ad_id = int(callback_query.data.split("_")[1])
@@ -320,6 +347,7 @@ async def process_reject(callback_query: types.CallbackQuery):
     )
     await callback_query.answer()
 
+
 @dp.callback_query_handler(lambda c: c.data.startswith("reason_"))
 async def process_reject_reason(callback_query: types.CallbackQuery):
     parts = callback_query.data.split("_")
@@ -332,7 +360,8 @@ async def process_reject_reason(callback_query: types.CallbackQuery):
     }
     reason = reasons.get(reason_type, "Відхилено")
 
-    cursor.execute("UPDATE ads SET is_rejected=1, rejection_reason=? WHERE id=?", (reason, ad_id))
+    cursor.execute(
+        "UPDATE ads SET is_rejected=1, rejection_reason=? WHERE id=?", (reason, ad_id))
     conn.commit()
 
     cursor.execute("SELECT user_id FROM ads WHERE id=?", (ad_id,))
@@ -349,11 +378,13 @@ async def process_reject_reason(callback_query: types.CallbackQuery):
     await callback_query.message.answer(f"✅ Оголошення #{ad_id} відхилено. Причина: {reason}")
     await callback_query.answer()
 
+
 @dp.callback_query_handler(lambda c: c.data.startswith("publish_"))
 async def process_publish(callback_query: types.CallbackQuery):
     ad_id = int(callback_query.data.split("_")[1])
 
-    cursor.execute("SELECT user_id, username, first_name, category, district, title, description, photos, contacts FROM ads WHERE id=?", (ad_id,))
+    cursor.execute(
+        "SELECT user_id, username, first_name, category, district, title, description, photos, contacts FROM ads WHERE id=?", (ad_id,))
     ad = cursor.fetchone()
 
     if not ad:
@@ -427,6 +458,8 @@ conn.commit()
 # -------------------------------
 # 🔹 Хендлер для групових чатів
 # -------------------------------
+
+
 @dp.message_handler(content_types=types.ContentTypes.ANY, chat_type=[types.ChatType.GROUP, types.ChatType.SUPERGROUP])
 async def group_logger(message: types.Message):
     chat_id = message.chat.id
@@ -448,18 +481,78 @@ async def group_logger(message: types.Message):
 # -------------------------------
 # 🔹 FastAPI endpoint для перегляду груп
 # -------------------------------
+
+
 @app.get("/groups")
 async def get_groups():
     cursor.execute("SELECT chat_id, title, type FROM groups")
     groups = cursor.fetchall()
     return {"groups": [{"chat_id": g[0], "title": g[1], "type": g[2]} for g in groups]}
-    
+ # -------------------------------
+# 🔹 Таблиця для гілок
+# -------------------------------
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS threads (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat_id INTEGER,
+    thread_id INTEGER,
+    title TEXT,
+    UNIQUE(chat_id, thread_id)
+)
+""")
+conn.commit()
+
+# -------------------------------
+# 🔹 Команда /bindthread
+# -------------------------------
+
+
+@dp.message_handler(commands=["bindthread"], chat_type=[types.ChatType.SUPERGROUP])
+async def bind_thread(message: types.Message):
+    # Перевіряємо, чи команда написана в гілці
+    if not message.is_topic_message:
+        await message.reply("⚠️ Використовуйте цю команду тільки в гілці (форум-темі).")
+        return
+
+    # Отримуємо назву з аргументів
+    args = message.get_args()
+    if not args:
+        await message.reply("❌ Ви не вказали назву.\nПриклад: `/bindthread Продаж тварин`", parse_mode="Markdown")
+        return
+
+    chat_id = message.chat.id
+    thread_id = message.message_thread_id
+    title = args.strip()
+
+    # Зберігаємо в базу
+    cursor.execute("""
+        INSERT INTO threads (chat_id, thread_id, title)
+        VALUES (?, ?, ?)
+        ON CONFLICT(chat_id, thread_id) DO UPDATE SET title=excluded.title
+    """, (chat_id, thread_id, title))
+    conn.commit()
+
+    await message.reply(f"✅ Гілку збережено як: *{title}*", parse_mode="Markdown")
+
+# -------------------------------
+# 🔹 API для перегляду гілок
+# -------------------------------
+
+
+@app.get("/threads")
+async def get_threads():
+    cursor.execute("SELECT chat_id, thread_id, title FROM threads")
+    rows = cursor.fetchall()
+    return {"threads": [{"chat_id": r[0], "thread_id": r[1], "title": r[2]} for r in rows]}
 # -------------------------------
 # 🔹 FastAPI endpoints
 # -------------------------------
+
+
 @app.on_event("startup")
 async def on_startup():
     await bot.set_webhook(WEBHOOK_URL)
+
 
 @app.post(WEBHOOK_PATH)
 async def webhook(request: Request):
