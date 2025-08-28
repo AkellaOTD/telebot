@@ -75,7 +75,8 @@ class RejectAd(StatesGroup):
 # -------------------------------
 # 🔹 Фільтр тексту
 # -------------------------------
-BANNED_WORDS = ["спам", "шахрайство", "лохотрон", "обман", "scam", "fraud"]
+BANNED_WORDS = os.getenv("BANNED_WORDS", "").split(",")
+BANNED_WORDS = [w.strip().lower() for w in BANNED_WORDS if w.strip()]
 
 def validate_input(text: str) -> tuple[bool, str]:
     if re.search(r"(http[s]?://|www\.|t\.me/)", text, re.IGNORECASE):
