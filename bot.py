@@ -87,6 +87,7 @@ class AdForm(StatesGroup):
 # -------------------------------
 BANNED_WORDS = os.getenv("BANNED_WORDS", "").split(",")
 BANNED_WORDS = [w.strip().lower() for w in BANNED_WORDS if w.strip()]
+DISTRICTS = [d.strip() for d in os.getenv("DISTRICTS", "").split(",") if d.strip()]
 
 def validate_input(text: str) -> tuple[bool, str]:
     if re.search(r"(http[s]?://|www\.|t\.me/)", text, re.IGNORECASE):
@@ -184,7 +185,8 @@ async def process_category(message: types.Message, state: FSMContext):
     await state.update_data(category=message.text)
     await AdForm.next()
     kb = ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.add("Центр", "Лівий берег", "Правий берег")
+    for d in DISTRICTS:
+        kb.add(d)
     await message.answer("Оберіть район:", reply_markup=kb)
 
 @dp.message_handler(state=AdForm.district)
