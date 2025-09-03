@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request
 import os
 import re
 import sqlite3
+from datetime import datetime, timedelta
 from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
@@ -56,7 +57,8 @@ CREATE TABLE IF NOT EXISTS ads (
     is_published INTEGER DEFAULT 0,
     is_rejected INTEGER DEFAULT 0,
     rejection_reason TEXT,
-    moder_message_id INTEGER
+    moder_message_id INTEGER,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )
 """)
 
@@ -87,7 +89,6 @@ class AdForm(StatesGroup):
 # -------------------------------
 BANNED_WORDS = os.getenv("BANNED_WORDS", "").split(",")
 BANNED_WORDS = [w.strip().lower() for w in BANNED_WORDS if w.strip()]
-DISTRICTS = [d.strip() for d in os.getenv("DISTRICTS", "").split(",") if d.strip()]
 
 def validate_input(text: str) -> tuple[bool, str]:
     if re.search(r"(http[s]?://|www\.|t\.me/)", text, re.IGNORECASE):
@@ -184,9 +185,10 @@ async def cmd_create(message: types.Message, state: FSMContext):
 async def process_category(message: types.Message, state: FSMContext):
     await state.update_data(category=message.text)
     await AdForm.next()
+    districts = os.getenv("DISTRICTS", "Центр,Лівий берег,Правий берег").split(",")
     kb = ReplyKeyboardMarkup(resize_keyboard=True)
-    for d in DISTRICTS:
-        kb.add(d)
+    for d in districts:
+        kb.add(d.strip())
     await message.answer("Оберіть район:", reply_markup=kb)
 
 @dp.message_handler(state=AdForm.district)
@@ -290,7 +292,6 @@ async def process_contacts(message: types.Message, state: FSMContext):
 
     kb = get_moder_keyboard(ad_id, message.from_user.id, message.from_user.username)
 
-    # Шукаємо гілку для модерації
     cursor.execute("""
         SELECT chat_id, thread_id FROM threads
         WHERE title=? AND chat_id=?
@@ -302,8 +303,6 @@ async def process_contacts(message: types.Message, state: FSMContext):
         return
 
     moder_chat_id, moder_thread_id = row
-
-    # Відправляємо у відповідну гілку
     msg = await bot.send_message(
         chat_id=moder_chat_id,
         message_thread_id=moder_thread_id,
@@ -387,7 +386,6 @@ async def process_publish(callback_query: types.CallbackQuery):
     )
     pub_kb = InlineKeyboardMarkup().add(get_user_button(user_id, username))
 
-    # шукаємо thread_id і chat_id
     cursor.execute("SELECT thread_id FROM threads WHERE chat_id=? AND title=?", (int(os.getenv("PUBLISH_CHAT_ID")), category))
     row = cursor.fetchone()
     if not row:
@@ -454,6 +452,33 @@ async def bind_thread(message: types.Message):
 
     await message.reply(f"✅ Гілку збережено як: *{title}*", parse_mode="Markdown")
 
+@dp.message_handler(commands=["stats"])
+async def cmd_stats(message: types.Message):
+    # Перевіряємо, що команда викликана у групі модераторів
+    if str(message.chat.id) != os.getenv("MODERATORS_CHAT_ID"):
+        await message.reply("⛔ Ця команда доступна лише у групі модераторів.")
+        return
+
+    now = datetime.now()
+    today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    week_ago = now - timedelta(days=7)
+    month_ago = now - timedelta(days=30)
+
+    cursor.execute("SELECT COUNT(*) FROM ads WHERE created_at >= ?", (today,))
+    today_count = cursor.fetchone()[0]
+
+    cursor.execute("SELECT COUNT(*) FROM ads WHERE created_at >= ?", (week_ago,))
+    week_count = cursor.fetchone()[0]
+
+    cursor.execute("SELECT COUNT(*) FROM ads WHERE created_at >= ?", (month_ago,))
+    month_count = cursor.fetchone()[0]
+
+    await message.reply(
+        "📊 Статистика оголошень:\n\n"
+        f"🗓 За сьогодні: {today_count}\n"
+        f"📅 За тиждень: {week_count}\n"
+        f"📆 За місяць: {month_count}"
+    )
 # -------------------------------
 # 🔹 API
 # -------------------------------
@@ -462,6 +487,28 @@ async def get_threads():
     cursor.execute("SELECT chat_id, thread_id, title FROM threads")
     rows = cursor.fetchall()
     return {"threads": [{"chat_id": r[0], "thread_id": r[1], "title": r[2]} for r in rows]}
+
+@app.get("/stats")
+async def get_stats():
+    now = datetime.now()
+    today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    week_ago = now - timedelta(days=7)
+    month_ago = now - timedelta(days=30)
+
+    cursor.execute("SELECT COUNT(*) FROM ads WHERE created_at >= ?", (today,))
+    today_count = cursor.fetchone()[0]
+
+    cursor.execute("SELECT COUNT(*) FROM ads WHERE created_at >= ?", (week_ago,))
+    week_count = cursor.fetchone()[0]
+
+    cursor.execute("SELECT COUNT(*) FROM ads WHERE created_at >= ?", (month_ago,))
+    month_count = cursor.fetchone()[0]
+
+    return {
+        "today": today_count,
+        "week": week_count,
+        "month": month_count
+    }
 
 # -------------------------------
 # 🔹 FastAPI endpoints
@@ -479,6 +526,7 @@ async def webhook(request: Request):
     Dispatcher.set_current(dp)
     await dp.process_update(update)
     return {"ok": True}
+
 
 # -------------------------------
 # 🔹 Локальний запуск
