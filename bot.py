@@ -525,6 +525,8 @@ async def process_queue(callback_query: types.CallbackQuery):
         callback_query.from_user.id,
         f"⏳ Оголошення #{ad_id} додано у чергу на публікацію"
     )
+    kb = ReplyKeyboardMarkup(resize_keyboard=True).add("📢 Подати оголошення")
+    await bot.send_message(user_id, "✅ Ваше оголошення додано до черги на публікацію!", reply_markup=kb)
 
     log_admin_action(callback_query.from_user.id, callback_query.from_user.username, "queue_ad", ad_id)
 # -------------------------------
