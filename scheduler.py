@@ -24,7 +24,7 @@ async def autopost():
             cursor.execute("""
                 SELECT id, user_id, username, first_name, category, district, title, description, photos, contacts
                 FROM ads
-                WHERE is_published=0 AND is_rejected=0
+                WHERE is_queued=1 AND is_published=0 AND is_rejected=0
                 ORDER BY created_at ASC
                 LIMIT 1
             """)
@@ -91,7 +91,7 @@ async def autopost():
                             )
 
                         # позначаємо як опубліковане
-                        cursor.execute("UPDATE ads SET is_published=1 WHERE id=?", (ad_id,))
+                        ccursor.execute("UPDATE ads SET is_published=1, is_queued=0 WHERE id=?", (ad_id,))
                         conn.commit()
                         logging.info(f"✅ Автопостинг: оголошення #{ad_id} опубліковане")
 

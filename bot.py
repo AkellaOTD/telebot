@@ -144,9 +144,10 @@ def faq_text():
     return "\n\n".join(lines)
 
 def get_moder_keyboard(ad_id: int, user_id: int, username: str | None):
-    kb = InlineKeyboardMarkup(row_width=2)
+    kb = InlineKeyboardMarkup(row_width=3)
     kb.add(
         InlineKeyboardButton("✅ Опублікувати", callback_data=f"publish_{ad_id}"),
+        InlineKeyboardButton("⏳ Додати в чергу", callback_data=f"queue_{ad_id}"),
         InlineKeyboardButton("❌ Відхилити", callback_data=f"reject_{ad_id}")
     )
     if username:
@@ -513,6 +514,19 @@ async def process_publish(callback_query: types.CallbackQuery):
     await callback_query.answer("Оголошення опубліковане ✅")
     log_admin_action(callback_query.from_user.id, callback_query.from_user.username, "publish", ad_id, chat_id, thread_id)
 
+@dp.callback_query_handler(lambda c: c.data.startswith("queue_"))
+async def process_queue(callback_query: types.CallbackQuery):
+    ad_id = int(callback_query.data.split("_")[1])
+    cursor.execute("UPDATE ads SET is_queued=1 WHERE id=?", (ad_id,))
+    conn.commit()
+
+    await callback_query.message.edit_reply_markup(reply_markup=None)
+    await bot.send_message(
+        callback_query.from_user.id,
+        f"⏳ Оголошення #{ad_id} додано у чергу на публікацію"
+    )
+
+    log_admin_action(callback_query.from_user.id, callback_query.from_user.username, "queue_ad", ad_id)
 # -------------------------------
 # 🔹 Inline handler для пересилань
 # -------------------------------
