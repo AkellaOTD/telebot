@@ -650,7 +650,10 @@ async def get_logs(
     thread_id: int | None = None,
     published: str | None = None   # "yes", "no" або None
 ):
-    # Отримуємо список доступних чатів і тредів для select
+    # Отримуємо доступні значення для select
+    cursor.execute("SELECT DISTINCT admin_id, admin_username FROM admin_logs WHERE admin_id IS NOT NULL")
+    admins = cursor.fetchall()
+
     cursor.execute("SELECT DISTINCT chat_id FROM admin_logs WHERE chat_id IS NOT NULL")
     chats = [row[0] for row in cursor.fetchall()]
 
@@ -711,6 +714,21 @@ async def get_logs(
     <body>
         <h1>Admin Logs</h1>
         <form method="get" class="filters">
+
+            <label>Admin:
+                <select name="admin_id">
+                    <option value="">-- All --</option>
+    """
+
+    for a_id, a_user in admins:
+        label = f"{a_id} (@{a_user})" if a_user else str(a_id)
+        selected = "selected" if str(admin_id) == str(a_id) else ""
+        html += f"<option value='{a_id}' {selected}>{label}</option>"
+
+    html += """
+                </select>
+            </label>
+
             <label>Chat:
                 <select name="chat_id">
                     <option value="">-- All --</option>
@@ -789,7 +807,6 @@ async def get_logs(
 
     html += "</table></body></html>"
     return HTMLResponse(content=html)
-    
 # -------------------------------
 # 🔹 Локальний запуск
 # -------------------------------
