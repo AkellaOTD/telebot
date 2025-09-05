@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
 import os
 import re
 import sqlite3
@@ -84,6 +85,20 @@ CREATE TABLE IF NOT EXISTS threads (
     UNIQUE(chat_id, thread_id)
 )
 """)
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS admin_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    admin_id INTEGER,
+    admin_username TEXT,
+    action TEXT,
+    ad_id INTEGER,
+    chat_id INTEGER,
+    thread_id INTEGER,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
+""")
+
 conn.commit()
 
 # -------------------------------
@@ -379,6 +394,13 @@ async def process_contacts(message: types.Message, state: FSMContext):
 # -------------------------------
 # 🔹 Модерація
 # -------------------------------
+def log_admin_action(admin_id, username, action, ad_id=None, chat_id=None, thread_id=None):
+    cursor.execute(
+        "INSERT INTO admin_logs (admin_id, admin_username, action, ad_id, chat_id, thread_id) VALUES (?, ?, ?, ?, ?, ?)",
+        (admin_id, username, action, ad_id, chat_id, thread_id)
+    )
+    conn.commit()
+
 @dp.callback_query_handler(lambda c: c.data.startswith("reject_"))
 async def process_reject(callback_query: types.CallbackQuery):
     ad_id = int(callback_query.data.split("_")[1])
@@ -420,6 +442,7 @@ async def process_reject_reason(callback_query: types.CallbackQuery):
     )
     await callback_query.message.answer(f"✅ Оголошення #{ad_id} відхилено. Причина: {reason}")
     await callback_query.answer()
+    log_admin_action(callback_query.from_user.id, callback_query.from_user.username, f"reject: {reason}", ad_id)
 
 @dp.callback_query_handler(lambda c: c.data.startswith("publish_"))
 async def process_publish(callback_query: types.CallbackQuery):
@@ -488,6 +511,7 @@ async def process_publish(callback_query: types.CallbackQuery):
     kb = ReplyKeyboardMarkup(resize_keyboard=True).add("📢 Подати оголошення")
     await bot.send_message(user_id, "✅ Ваше оголошення успішно опубліковане!", reply_markup=kb)
     await callback_query.answer("Оголошення опубліковане ✅")
+    log_admin_action(callback_query.from_user.id, callback_query.from_user.username, "publish", ad_id, chat_id, thread_id)
 
 # -------------------------------
 # 🔹 Inline handler для пересилань
@@ -551,6 +575,7 @@ async def bind_thread(message: types.Message):
     conn.commit()
 
     await message.reply(f"✅ Гілку збережено як: *{title}*", parse_mode="Markdown")
+    log_admin_action(message.from_user.id, message.from_user.username, "bind_thread", chat_id=chat_id, thread_id=thread_id)
 
 # -------------------------------
 # 🔹 Статистика
@@ -586,6 +611,7 @@ async def cmd_stats(message: types.Message):
         f"📆 За місяць: {month_count}\n"
         f"🔗 Всього пересилань: {total_shares}"
     )
+    log_admin_action(message.from_user.id, message.from_user.username, "view_stats", chat_id=message.chat.id)
 
 # -------------------------------
 # 🔹 API
@@ -613,6 +639,157 @@ async def webhook(request: Request):
     await dp.process_update(update)
     return {"ok": True}
 
+
+@app.get("/logs", response_class=HTMLResponse)
+async def get_logs(
+    admin_id: int | None = None,
+    action: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    chat_id: int | None = None,
+    thread_id: int | None = None,
+    published: str | None = None   # "yes", "no" або None
+):
+    # Отримуємо список доступних чатів і тредів для select
+    cursor.execute("SELECT DISTINCT chat_id FROM admin_logs WHERE chat_id IS NOT NULL")
+    chats = [row[0] for row in cursor.fetchall()]
+
+    cursor.execute("SELECT DISTINCT thread_id FROM admin_logs WHERE thread_id IS NOT NULL")
+    threads = [row[0] for row in cursor.fetchall()]
+
+    # Базовий SQL
+    query = """
+        SELECT id, admin_id, admin_username, action, ad_id, chat_id, thread_id, created_at
+        FROM admin_logs
+        WHERE 1=1
+    """
+    params = []
+
+    if admin_id:
+        query += " AND admin_id=?"
+        params.append(admin_id)
+    if action:
+        query += " AND action LIKE ?"
+        params.append(f"%{action}%")
+    if date_from:
+        query += " AND date(created_at) >= date(?)"
+        params.append(date_from)
+    if date_to:
+        query += " AND date(created_at) <= date(?)"
+        params.append(date_to)
+    if chat_id:
+        query += " AND chat_id=?"
+        params.append(chat_id)
+    if thread_id:
+        query += " AND thread_id=?"
+        params.append(thread_id)
+    if published == "yes":
+        query += " AND action LIKE 'publish%'"
+    elif published == "no":
+        query += " AND action LIKE 'reject%'"
+
+    query += " ORDER BY created_at DESC LIMIT 200"
+    cursor.execute(query, params)
+    rows = cursor.fetchall()
+
+    # HTML-форма + таблиця
+    html = """
+    <html>
+    <head>
+        <title>Admin Logs</title>
+        <style>
+            body { font-family: Arial, sans-serif; padding: 20px; }
+            table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+            th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+            th { background-color: #f4f4f4; }
+            tr:nth-child(even) { background-color: #fafafa; }
+            .filters { margin-bottom: 20px; }
+            .filters label { margin-right: 10px; }
+            .filters select, .filters input { margin-right: 15px; }
+        </style>
+    </head>
+    <body>
+        <h1>Admin Logs</h1>
+        <form method="get" class="filters">
+            <label>Chat:
+                <select name="chat_id">
+                    <option value="">-- All --</option>
+    """
+
+    for chat in chats:
+        selected = "selected" if str(chat_id) == str(chat) else ""
+        html += f"<option value='{chat}' {selected}>{chat}</option>"
+
+    html += """
+                </select>
+            </label>
+
+            <label>Thread:
+                <select name="thread_id">
+                    <option value="">-- All --</option>
+    """
+
+    for t in threads:
+        selected = "selected" if str(thread_id) == str(t) else ""
+        html += f"<option value='{t}' {selected}>{t}</option>"
+
+    html += """
+                </select>
+            </label>
+
+            <label>Status:
+                <select name="published">
+                    <option value="">-- All --</option>
+                    <option value="yes" {yes_sel}>Published</option>
+                    <option value="no" {no_sel}>Rejected</option>
+                </select>
+            </label>
+
+            <label>Date from:
+                <input type="date" name="date_from" value="{date_from}">
+            </label>
+
+            <label>Date to:
+                <input type="date" name="date_to" value="{date_to}">
+            </label>
+
+            <input type="submit" value="Filter">
+        </form>
+        <table>
+            <tr>
+                <th>ID</th>
+                <th>Admin ID</th>
+                <th>Username</th>
+                <th>Action</th>
+                <th>Ad ID</th>
+                <th>Chat</th>
+                <th>Thread</th>
+                <th>Time</th>
+            </tr>
+    """.format(
+        yes_sel="selected" if published == "yes" else "",
+        no_sel="selected" if published == "no" else "",
+        date_from=date_from or "",
+        date_to=date_to or ""
+    )
+
+    for r in rows:
+        html += f"""
+        <tr>
+            <td>{r[0]}</td>
+            <td>{r[1]}</td>
+            <td>@{r[2] if r[2] else ''}</td>
+            <td>{r[3]}</td>
+            <td>{r[4] if r[4] else ''}</td>
+            <td>{r[5] if r[5] else ''}</td>
+            <td>{r[6] if r[6] else ''}</td>
+            <td>{r[7]}</td>
+        </tr>
+        """
+
+    html += "</table></body></html>"
+    return HTMLResponse(content=html)
+    
 # -------------------------------
 # 🔹 Локальний запуск
 # -------------------------------
