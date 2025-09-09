@@ -126,11 +126,6 @@ class AdForm(StatesGroup):
     photos = State()
     contacts = State()
 
-# ======================
-#  FSM для редагування
-# ======================
-class EditAdForm(StatesGroup):
-    value = State()
 # -------------------------------
 # 🔹 Фільтр тексту
 # -------------------------------
@@ -323,27 +318,32 @@ async def process_photos(message: types.Message, state: FSMContext):
         await message.answer(faq_text(), reply_markup=main_menu_kb())
         return
 
-    data = await state.get_data()
-    photos = data.get("photos", "")
+        data = await state.get_data()
+    photos_data = data.get("photos", [])  # зберігаємо список словників {file_id, unique_id}
 
     if message.content_type == "photo":
         file_id = message.photo[-1].file_id
-        photos = (photos + "," + file_id).strip(",")
-        await state.update_data(photos=photos)
-        kb = ReplyKeyboardMarkup(resize_keyboard=True)
-        kb.add("Готово", "ℹ️ FAQ")
-        await message.answer("Фото додано ✅ Якщо все — натисніть «Готово».", reply_markup=kb)
-    elif message.text.lower() == "пропустити":
-        await AdForm.next()
-        kb = ReplyKeyboardMarkup(resize_keyboard=True)
-        kb.add("ℹ️ FAQ")
-        await message.answer("Введіть контактну інформацію (до 200 символів):", reply_markup=kb)
-    elif message.text.lower() == "готово":
-        await AdForm.next()
-        kb = ReplyKeyboardMarkup(resize_keyboard=True)
-        kb.add("ℹ️ FAQ")
-        await message.answer("Введіть контактну інформацію (до 200 символів):", reply_markup=kb)
+        unique_id = message.photo[-1].file_unique_id
 
+        # Перевіряємо дублікат
+        if unique_id not in [p["unique_id"] for p in photos_data]:
+            photos_data.append({"file_id": file_id, "unique_id": unique_id})
+            await state.update_data(photos_data=photos_data)
+            kb = ReplyKeyboardMarkup(resize_keyboard=True)
+            kb.add("Готово", "ℹ️ FAQ")
+            await message.answer(f"Фото додано ✅ Всього фото: {len(photos_data)}. Якщо все — натисніть «Готово».", reply_markup=kb)
+        else:
+            await message.answer("❌ Це фото вже додано раніше, дублікат ігнорується.")
+
+    elif message.text.lower() == "пропустити" or message.text.lower() == "готово":
+        # Формуємо рядок з file_id тільки унікальних фото
+        photos_str = ",".join([p["file_id"] for p in photos_data])
+        await state.update_data(photos=photos_str)
+        await AdForm.next()
+        kb = ReplyKeyboardMarkup(resize_keyboard=True)
+        kb.add("ℹ️ FAQ")
+        await message.answer("Введіть контактну інформацію (до 200 символів):", reply_markup=kb)
+        
 @dp.message_handler(state=AdForm.contacts)
 async def process_contacts(message: types.Message, state: FSMContext):
     if len(message.text) > 200:
@@ -607,90 +607,6 @@ async def process_unblacklist(callback_query: types.CallbackQuery):
                      None)
 
 
-# -------------------------------
-# 🔹 Редагування оголошень
-# -------------------------------
-
-
-# -------------------------------
-# 1️⃣ Кнопка "Редагувати" — меню полів
-@dp.callback_query_handler(lambda c: c.data.startswith("edit_"))
-async def edit_menu(callback_query: types.CallbackQuery):
-    ad_id = int(callback_query.data.split("_")[1])
-    kb = InlineKeyboardMarkup(row_width=2)
-    kb.add(
-        InlineKeyboardButton("🏷 Заголовок", callback_data=f"editfield_title_{ad_id}"),
-        InlineKeyboardButton("📝 Опис", callback_data=f"editfield_description_{ad_id}"),
-        InlineKeyboardButton("📞 Контакти", callback_data=f"editfield_contacts_{ad_id}"),
-        InlineKeyboardButton("📍 Район", callback_data=f"editfield_district_{ad_id}")
-    )
-    await callback_query.message.answer(f"✏️ Виберіть поле для редагування #{ad_id}:", reply_markup=kb)
-    await callback_query.answer()
-
-# -------------------------------
-# 2️⃣ Користувач обрав конкретне поле
-@dp.callback_query_handler(lambda c: c.data.startswith("editfield_"))
-async def edit_field(callback_query: types.CallbackQuery, state: FSMContext):
-    _, field, ad_id = callback_query.data.split("_")
-    ad_id = int(ad_id)
-    await state.update_data(ad_id=ad_id, field=field)
-    await EditAdForm.value.set()
-    await callback_query.message.answer(f"Введіть нове значення для поля '{field}':")
-    await callback_query.answer()
-
-# -------------------------------
-# 3️⃣ Користувач вводить нове значення
-@dp.message_handler(state=EditAdForm.value)
-async def save_edited_value(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    ad_id = data.get("ad_id")
-    field = data.get("field")
-
-    # Оновлюємо базу
-    cursor.execute(f"UPDATE ads SET {field}=? WHERE id=?", (message.text, ad_id))
-    conn.commit()
-
-    # Отримуємо оновлене оголошення
-    cursor.execute("""
-        SELECT user_id, username, first_name, category, district, title, description, photos, contacts, moder_message_id
-        FROM ads WHERE id=?
-    """, (ad_id,))
-    ad = cursor.fetchone()
-    if not ad:
-        await message.answer("❌ Оголошення не знайдено.")
-        await state.finish()
-        return
-
-    user_id, username, first_name, category, district, title, description, photos, contacts, moder_message_id = ad
-
-    # Формуємо оновлений текст для модератора
-    moder_text = (
-        f"📢 НОВЕ ОГОЛОШЕННЯ #{ad_id}\n\n"
-        f"👤 Користувач: {first_name or ''} (@{username}) [ID: {user_id}]\n\n"
-        f"🔹 Категорія: {category}\n"
-        f"📍 Район: {district}\n"
-        f"🏷 Заголовок: {title}\n"
-        f"📝 Опис: {description}\n"
-        f"📞 Контакти: {contacts}\n"
-    )
-
-    kb = get_moder_keyboard(ad_id, user_id, username)
-
-    # Оновлюємо повідомлення у групі модераторів
-    moder_chat_id = int(os.getenv("MODERATORS_CHAT_ID"))
-    try:
-        await bot.edit_message_text(
-            chat_id=moder_chat_id,
-            message_id=moder_message_id,
-            text=moder_text,
-            reply_markup=kb
-        )
-    except Exception as e:
-        print(f"Error editing moderator message: {e}")
-
-    await message.answer(f"✅ Поле '{field}' успішно оновлено!")
-    await state.finish()
-    
 # -------------------------------
 # 🔹 Inline handler для пересилань
 # -------------------------------
