@@ -223,7 +223,7 @@ async def my_ads(message: types.Message):
     conn = sqlite3.connect("bot.db")
     cursor = conn.cursor()
 
-    cursor.execute("SELECT id, title, description, contacts, photos, is_published, is_rejected, is_queued FROM ads WHERE user_id=?", (message.from_user.id,))
+    cursor.execute("SELECT id, title, description, contacts, category, district, photos, is_published, is_rejected, is_queued FROM ads WHERE user_id=?", (message.from_user.id,))
     ads = cursor.fetchall()
     conn.close()
 
@@ -232,7 +232,7 @@ async def my_ads(message: types.Message):
         return
 
     for ad in ads:
-        ad_id, title, description, contacts, photos, is_published, is_rejected, is_queued = ad
+        ad_id, title, description, contacts, category, district, photos, is_published, is_rejected, is_queued = ad
         
         if is_published:
             status = "опубліковано"
@@ -240,13 +240,14 @@ async def my_ads(message: types.Message):
             status = "відхилено"
         else:
             status = "в черзі"
-
+        
         ad_text = (
-            f"📌 <b>Оголошення #{ad_id}</b>\n\n"
-            f"<b>Заголовок:</b> {title}\n"
-            f"<b>Опис:</b> {description}\n"
-            f"<b>Контакти:</b> {contacts}\n"
-            f"<b>Статус:</b> {status}"
+            f"📢 ОГОЛОШЕННЯ #{ad_id}\n\n"
+            f"🔹 Категорія: {category}\n"
+            f"📍 Район: {district}\n"
+            f"🏷 Заголовок: {title}\n"
+            f"📝 Опис: {description}\n"
+            f"📞 Контакти: {contacts}\n"
         )
 
         # Якщо є фото — показуємо перше
