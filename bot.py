@@ -285,7 +285,7 @@ async def cmd_create(message: types.Message, state: FSMContext):
     cursor.execute("SELECT title FROM threads WHERE chat_id=?", (int(os.getenv("MODERATORS_CHAT_ID")),))
     categories = [row[0] for row in cursor.fetchall()]
     if not categories:
-        await message.answer("⚠️ Немає доступних категорій. Адміністратор має додати гілки командою /bindthread")
+        await message.answer("⚠️ Немає доступних категорій. Спробуйте пізніше")
         return
 
     await AdForm.category.set()
