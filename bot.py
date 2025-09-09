@@ -632,33 +632,56 @@ async def process_edit_field(callback_query: types.CallbackQuery, state: FSMCont
 
     await callback_query.message.answer(f"Введіть нове значення для {field}:")
     await callback_query.answer()
+    
+@dp.callback_query_handler(lambda c: c.data.startswith("edit_"))
+async def process_edit_callback(callback_query: types.CallbackQuery, state: FSMContext):
+    parts = callback_query.data.split("_")
+    ad_id = int(parts[1])
+    field = parts[2]  # title, description, contacts
 
+    await state.update_data(ad_id=ad_id, field=field)
+    await EditAdForm.value.set()
+
+    await callback_query.message.answer(f"Введіть нове значення для поля '{field}':")
+    await callback_query.answer()
 @dp.message_handler(state=EditAdForm.value)
 async def process_edit_value(message: types.Message, state: FSMContext):
     data = await state.get_data()
-    ad_id = data["ad_id"]
-    field = data["field"]
-    value = message.text.strip()
+    ad_id = data.get("ad_id")
+    field = data.get("field")
 
-    allowed_fields = {
-        "title": "title",
-        "description": "description",
-        "contacts": "contacts",
-        "district": "district"
-    }
-
-    if field not in allowed_fields:
-        await message.answer("❌ Невідоме поле.")
-        await state.finish()
-        return
-
-    column = allowed_fields[field]
-    cursor.execute(f"UPDATE ads SET {column}=? WHERE id=?", (value, ad_id))
+    # Оновлюємо базу
+    cursor.execute(f"UPDATE ads SET {field}=? WHERE id=?", (message.text, ad_id))
     conn.commit()
 
-    await message.answer(f"✅ Поле '{column}' оновлено для оголошення #{ad_id}")
-    log_admin_action(message.from_user.id, message.from_user.username, f"edit_{column}", ad_id)
+    # Отримуємо оголошення заново
+    cursor.execute("SELECT user_id, username, first_name, category, district, title, description, photos, contacts, moder_message_id FROM ads WHERE id=?", (ad_id,))
+    ad = cursor.fetchone()
+    user_id, username, first_name, category, district, title, description, photos, contacts, moder_message_id = ad
 
+    # Створюємо оновлений текст для модератора
+    moder_text = (
+        f"📢 НОВЕ ОГОЛОШЕННЯ #{ad_id}\n\n"
+        f"👤 Користувач: {first_name or ''} (@{username}) [ID: {user_id}]\n\n"
+        f"🔹 Категорія: {category}\n"
+        f"📍 Район: {district}\n"
+        f"🏷 Заголовок: {title}\n"
+        f"📝 Опис: {description}\n"
+        f"📞 Контакти: {contacts}\n"
+    )
+
+    kb = get_moder_keyboard(ad_id, user_id, username)
+
+    # Оновлюємо повідомлення у групі модераторів
+    moder_chat_id = int(os.getenv("MODERATORS_CHAT_ID"))
+    await bot.edit_message_text(
+        chat_id=moder_chat_id,
+        message_id=moder_message_id,
+        text=moder_text,
+        reply_markup=kb
+    )
+
+    await message.answer(f"✅ Поле '{field}' успішно оновлено!")
     await state.finish()
 
 # -------------------------------
