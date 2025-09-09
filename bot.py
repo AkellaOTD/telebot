@@ -220,7 +220,7 @@ async def handle_faq(message: types.Message):
 
 @dp.message_handler(lambda m: m.text == "📋 Мої оголошення")
 async def my_ads(message: types.Message):
-    conn = sqlite3.connect("ads.db")
+    conn = sqlite3.connect("bot.db")
     cursor = conn.cursor()
 
     cursor.execute("SELECT id, title, description, price, contacts, photos, status FROM ads WHERE user_id=?", (message.from_user.id,))
@@ -466,27 +466,31 @@ async def process_contacts(message: types.Message, state: FSMContext):
         photos = photos.split(",")
         if len(photos) == 1:
             await bot.send_photo(
-                chat_id=MODERATORS_CHAT_ID,
-                message_thread_id=thread_id,
+                chat_id=moder_chat_id,
+                message_thread_id=moder_thread_id,
                 photo=photos[0],
-                caption=pub_text,
-                reply_markup=pub_kb
+                caption=moder_text,
+                reply_markup=kb
             )
         else:
             media = [types.InputMediaPhoto(p) for p in photos[:10]]
-            await bot.send_media_group(chat_id=chat_id, message_thread_id=thread_id, media=media)
+            await bot.send_media_group(
+                chat_id=moder_chat_id,
+                message_thread_id=moder_thread_id,
+                media=media
+            )
             await bot.send_message(
-                chat_id=MODERATORS_CHAT_ID,
-                message_thread_id=thread_id,
-                text=pub_text,
-                reply_markup=pub_kb
+                chat_id=moder_chat_id,
+                message_thread_id=moder_thread_id,
+                text=moder_text,
+                reply_markup=kb
             )
     else:
         await bot.send_message(
-            chat_id=MODERATORS_CHAT_ID,
-            message_thread_id=thread_id,
-            text=pub_text,
-            reply_markup=pub_kb
+            chat_id=moder_chat_id,
+            message_thread_id=moder_thread_id,
+            text=moder_text,
+            reply_markup=kb
         )
 
     cursor.execute("UPDATE ads SET moder_message_id=? WHERE id=?", (msg.message_id, ad_id))
