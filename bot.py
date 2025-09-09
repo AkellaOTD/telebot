@@ -46,11 +46,6 @@ storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
 app = FastAPI()
 
-# ======================
-#  FSM для редагування
-# ======================
-class EditAdForm(StatesGroup):
-    value = State()
 # -------------------------------
 # 🔹 База даних
 # -------------------------------
@@ -131,6 +126,11 @@ class AdForm(StatesGroup):
     photos = State()
     contacts = State()
 
+# ======================
+#  FSM для редагування
+# ======================
+class EditAdForm(StatesGroup):
+    value = State()
 # -------------------------------
 # 🔹 Фільтр тексту
 # -------------------------------
@@ -606,62 +606,59 @@ async def process_unblacklist(callback_query: types.CallbackQuery):
                      "unblacklist_user",
                      None)
 
+# -------------------------------
+# 🔹 Callback для редагування
+# -------------------------------
 @dp.callback_query_handler(lambda c: c.data.startswith("edit_"))
 async def process_edit(callback_query: types.CallbackQuery, state: FSMContext):
     ad_id = int(callback_query.data.split("_")[1])
-    await state.update_data(ad_id=ad_id)
-
     kb = InlineKeyboardMarkup(row_width=2)
     kb.add(
-        InlineKeyboardButton("🏷 Заголовок", callback_data="editfield_title"),
-        InlineKeyboardButton("📝 Опис", callback_data="editfield_description"),
+        InlineKeyboardButton("🏷 Заголовок", callback_data=f"editfield_title_{ad_id}"),
+        InlineKeyboardButton("📝 Опис", callback_data=f"editfield_description_{ad_id}"),
+        InlineKeyboardButton("📞 Контакти", callback_data=f"editfield_contacts_{ad_id}"),
+        InlineKeyboardButton("📍 Район", callback_data=f"editfield_district_{ad_id}")
     )
-    kb.add(
-        InlineKeyboardButton("📞 Контакти", callback_data="editfield_contacts"),
-        InlineKeyboardButton("📍 Район", callback_data="editfield_district"),
-    )
-
     await callback_query.message.answer(f"✏️ Виберіть поле для редагування #{ad_id}:", reply_markup=kb)
     await callback_query.answer()
 
 @dp.callback_query_handler(lambda c: c.data.startswith("editfield_"))
 async def process_edit_field(callback_query: types.CallbackQuery, state: FSMContext):
-    field = callback_query.data.split("_")[1]
-    await state.update_data(field=field)
-    await EditAdForm.value.set()
-
-    await callback_query.message.answer(f"Введіть нове значення для {field}:")
-    await callback_query.answer()
-    
-@dp.callback_query_handler(lambda c: c.data.startswith("edit_"))
-async def process_edit_callback(callback_query: types.CallbackQuery, state: FSMContext):
     parts = callback_query.data.split("_")
-    ad_id = int(parts[1])
-    field = parts[2]  # title, description, contacts
-
+    field = parts[1]
+    ad_id = int(parts[2])
     await state.update_data(ad_id=ad_id, field=field)
     await EditAdForm.value.set()
-
-    await callback_query.message.answer(f"Введіть нове значення для поля '{field}':")
+    await callback_query.message.answer(f"✏️ Введіть нове значення для поля '{field}':")
     await callback_query.answer()
+
 @dp.message_handler(state=EditAdForm.value)
 async def process_edit_value(message: types.Message, state: FSMContext):
     data = await state.get_data()
     ad_id = data.get("ad_id")
     field = data.get("field")
 
-    # Оновлюємо базу
+    if field == "district" and message.text not in DISTRICTS:
+        await message.answer(f"❌ Недопустимий район. Доступні: {', '.join(DISTRICTS)}")
+        return
+
+    valid, error = validate_input(message.text)
+    if not valid:
+        await message.answer(error)
+        return
+
     cursor.execute(f"UPDATE ads SET {field}=? WHERE id=?", (message.text, ad_id))
     conn.commit()
 
-    # Отримуємо оголошення заново
-    cursor.execute("SELECT user_id, username, first_name, category, district, title, description, photos, contacts, moder_message_id FROM ads WHERE id=?", (ad_id,))
+    cursor.execute("""
+        SELECT user_id, username, first_name, category, district, title, description, contacts, moder_message_id
+        FROM ads WHERE id=?
+    """, (ad_id,))
     ad = cursor.fetchone()
-    user_id, username, first_name, category, district, title, description, photos, contacts, moder_message_id = ad
+    user_id, username, first_name, category, district, title, description, contacts, moder_message_id = ad
 
-    # Створюємо оновлений текст для модератора
     moder_text = (
-        f"📢 НОВЕ ОГОЛОШЕННЯ #{ad_id}\n\n"
+        f"📢 ОНОВЛЕНЕ ОГОЛОШЕННЯ #{ad_id}\n\n"
         f"👤 Користувач: {first_name or ''} (@{username}) [ID: {user_id}]\n\n"
         f"🔹 Категорія: {category}\n"
         f"📍 Район: {district}\n"
@@ -669,17 +666,11 @@ async def process_edit_value(message: types.Message, state: FSMContext):
         f"📝 Опис: {description}\n"
         f"📞 Контакти: {contacts}\n"
     )
-
     kb = get_moder_keyboard(ad_id, user_id, username)
-
-    # Оновлюємо повідомлення у групі модераторів
-    moder_chat_id = int(os.getenv("MODERATORS_CHAT_ID"))
-    await bot.edit_message_text(
-        chat_id=moder_chat_id,
-        message_id=moder_message_id,
-        text=moder_text,
-        reply_markup=kb
-    )
+    try:
+        await bot.edit_message_text(chat_id=MODERATORS_CHAT_ID, message_id=moder_message_id, text=moder_text, reply_markup=kb)
+    except Exception as e:
+        await message.answer(f"⚠️ Не вдалося оновити повідомлення у групі: {e}")
 
     await message.answer(f"✅ Поле '{field}' успішно оновлено!")
     await state.finish()
