@@ -183,7 +183,7 @@ def get_user_button(user_id: int, username: str | None):
 # -------------------------------
 # 🔹 /start
 # -------------------------------
-@dp.message_handler(commands="start")
+@dp.message_handler(commands="Почати")
 async def cmd_start(message: types.Message):
     cursor.execute("SELECT accepted_rules FROM users WHERE user_id = ?", (message.from_user.id,))
     user = cursor.fetchone()
