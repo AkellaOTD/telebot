@@ -610,10 +610,12 @@ async def process_unblacklist(callback_query: types.CallbackQuery):
 # -------------------------------
 # 🔹 Редагування оголошень
 # -------------------------------
+
+
 # -------------------------------
-# Кнопка "Редагувати" — меню полів
+# 1️⃣ Кнопка "Редагувати" — меню полів
 @dp.callback_query_handler(lambda c: c.data.startswith("edit_"))
-async def process_edit_menu(callback_query: types.CallbackQuery):
+async def edit_menu(callback_query: types.CallbackQuery):
     ad_id = int(callback_query.data.split("_")[1])
     kb = InlineKeyboardMarkup(row_width=2)
     kb.add(
@@ -626,26 +628,25 @@ async def process_edit_menu(callback_query: types.CallbackQuery):
     await callback_query.answer()
 
 # -------------------------------
-# Користувач обрав конкретне поле
+# 2️⃣ Користувач обрав конкретне поле
 @dp.callback_query_handler(lambda c: c.data.startswith("editfield_"))
-async def process_edit_field(callback_query: types.CallbackQuery, state: FSMContext):
-    parts = callback_query.data.split("_")
-    field = parts[1]
-    ad_id = int(parts[2])
+async def edit_field(callback_query: types.CallbackQuery, state: FSMContext):
+    _, field, ad_id = callback_query.data.split("_")
+    ad_id = int(ad_id)
     await state.update_data(ad_id=ad_id, field=field)
     await EditAdForm.value.set()
     await callback_query.message.answer(f"Введіть нове значення для поля '{field}':")
     await callback_query.answer()
 
 # -------------------------------
-# Користувач ввів нове значення для поля
+# 3️⃣ Користувач вводить нове значення
 @dp.message_handler(state=EditAdForm.value)
-async def process_edit_value(message: types.Message, state: FSMContext):
+async def save_edited_value(message: types.Message, state: FSMContext):
     data = await state.get_data()
     ad_id = data.get("ad_id")
     field = data.get("field")
 
-    # Оновлюємо базу даних
+    # Оновлюємо базу
     cursor.execute(f"UPDATE ads SET {field}=? WHERE id=?", (message.text, ad_id))
     conn.commit()
 
@@ -677,16 +678,19 @@ async def process_edit_value(message: types.Message, state: FSMContext):
 
     # Оновлюємо повідомлення у групі модераторів
     moder_chat_id = int(os.getenv("MODERATORS_CHAT_ID"))
-    await bot.edit_message_text(
-        chat_id=moder_chat_id,
-        message_id=moder_message_id,
-        text=moder_text,
-        reply_markup=kb
-    )
+    try:
+        await bot.edit_message_text(
+            chat_id=moder_chat_id,
+            message_id=moder_message_id,
+            text=moder_text,
+            reply_markup=kb
+        )
+    except Exception as e:
+        print(f"Error editing moderator message: {e}")
 
     await message.answer(f"✅ Поле '{field}' успішно оновлено!")
     await state.finish()
-
+    
 # -------------------------------
 # 🔹 Inline handler для пересилань
 # -------------------------------
