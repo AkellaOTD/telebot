@@ -405,7 +405,7 @@ async def process_contacts(message: types.Message, state: FSMContext):
 
     await state.update_data(contacts=message.text)
     data = await state.get_data()
-
+    photos = data.get("photos", "")
     cursor.execute("""
         INSERT INTO ads (
             user_id, username, first_name, category, district, title, description, photos, contacts,
