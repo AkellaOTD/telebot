@@ -27,6 +27,11 @@ WEBHOOK_HOST = os.getenv("WEBHOOK_HOST")
 WEBHOOK_PATH = "/webhook"
 WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
 
+MODERATORS_CHAT_ID = os.getenv("MODERATORS_CHAT_ID")
+if not MODERATORS_CHAT_ID:
+    raise ValueError("❌ MODERATORS_CHAT_ID не знайдено у .env")
+MODERATORS_CHAT_ID = int(MODERATORS_CHAT_ID)
+
 DISTRICTS = os.getenv("DISTRICTS", "Центр,Лівий берег,Правий берег").split(",")
 
 FAQ_RAW = os.getenv("FAQ", "")
@@ -159,6 +164,9 @@ def get_moder_keyboard(ad_id: int, user_id: int, username: str | None):
         InlineKeyboardButton("⏳ Додати в чергу", callback_data=f"queue_{ad_id}"),
         InlineKeyboardButton("❌ Відхилити", callback_data=f"reject_{ad_id}"),
         InlineKeyboardButton("🚫 Чорний список", callback_data=f"blacklist_{ad_id}")
+    )
+    kb.add(
+        InlineKeyboardButton("✏️ Редагувати", callback_data=f"edit_{ad_id}"),
     )
     if username:
         kb.add(InlineKeyboardButton(f"👤 @{username}", url=f"https://t.me/{username}"))
@@ -592,7 +600,62 @@ async def process_unblacklist(callback_query: types.CallbackQuery):
                      callback_query.from_user.username,
                      "unblacklist_user",
                      None)
-    
+
+@dp.callback_query_handler(lambda c: c.data.startswith("edit_"))
+async def process_edit(callback_query: types.CallbackQuery, state: FSMContext):
+    ad_id = int(callback_query.data.split("_")[1])
+    await state.update_data(ad_id=ad_id)
+
+    kb = InlineKeyboardMarkup(row_width=2)
+    kb.add(
+        InlineKeyboardButton("🏷 Заголовок", callback_data="editfield_title"),
+        InlineKeyboardButton("📝 Опис", callback_data="editfield_description"),
+    )
+    kb.add(
+        InlineKeyboardButton("📞 Контакти", callback_data="editfield_contacts"),
+        InlineKeyboardButton("📍 Район", callback_data="editfield_district"),
+    )
+
+    await callback_query.message.answer(f"✏️ Виберіть поле для редагування #{ad_id}:", reply_markup=kb)
+    await callback_query.answer()
+
+@dp.callback_query_handler(lambda c: c.data.startswith("editfield_"))
+async def process_edit_field(callback_query: types.CallbackQuery, state: FSMContext):
+    field = callback_query.data.split("_")[1]
+    await state.update_data(field=field)
+    await EditAdForm.value.set()
+
+    await callback_query.message.answer(f"Введіть нове значення для {field}:")
+    await callback_query.answer()
+
+@dp.message_handler(state=EditAdForm.value)
+async def process_edit_value(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    ad_id = data["ad_id"]
+    field = data["field"]
+    value = message.text.strip()
+
+    allowed_fields = {
+        "title": "title",
+        "description": "description",
+        "contacts": "contacts",
+        "district": "district"
+    }
+
+    if field not in allowed_fields:
+        await message.answer("❌ Невідоме поле.")
+        await state.finish()
+        return
+
+    column = allowed_fields[field]
+    cursor.execute(f"UPDATE ads SET {column}=? WHERE id=?", (value, ad_id))
+    conn.commit()
+
+    await message.answer(f"✅ Поле '{column}' оновлено для оголошення #{ad_id}")
+    log_admin_action(message.from_user.id, message.from_user.username, f"edit_{column}", ad_id)
+
+    await state.finish()
+
 # -------------------------------
 # 🔹 Inline handler для пересилань
 # -------------------------------
@@ -660,7 +723,7 @@ async def bind_thread(message: types.Message):
 @dp.message_handler(commands=["blacklist"])
 async def cmd_blacklist(message: types.Message):
     # Доступ тільки для адмінів
-    if message.chat.id != int(os.getenv("MODERATORS_CHAT_ID")):
+    if message.chat.id != MODERATORS_CHAT_ID:
         await message.answer("⛔ Ця команда доступна лише в адмін-групі")
         return
 
