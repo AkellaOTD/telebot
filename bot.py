@@ -279,8 +279,8 @@ async def cmd_create(message: types.Message, state: FSMContext):
     cursor.execute("SELECT accepted_rules FROM users WHERE user_id = ?", (message.from_user.id,))
     user = cursor.fetchone()
     if not user or not user[0]:
-        await message.answer("⚠️ Спершу потрібно погодитись із правилами! Натисніть /start")
         kb = ReplyKeyboardMarkup(resize_keyboard=True).add("Почати")
+        await message.answer("⚠️ Спершу потрібно погодитись із правилами! Натисніть Почати")
         return
 
     cursor.execute("SELECT title FROM threads WHERE chat_id=?", (int(os.getenv("MODERATORS_CHAT_ID")),))
