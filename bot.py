@@ -46,6 +46,11 @@ storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
 app = FastAPI()
 
+# ======================
+#  FSM для редагування
+# ======================
+class EditAdForm(StatesGroup):
+    value = State()
 # -------------------------------
 # 🔹 База даних
 # -------------------------------
