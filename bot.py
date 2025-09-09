@@ -610,56 +610,43 @@ async def process_unblacklist(callback_query: types.CallbackQuery):
 # -------------------------------
 # 🔹 Редагування оголошень
 # -------------------------------
+# -------------------------------
+# Кнопка "Редагувати" — меню полів
 @dp.callback_query_handler(lambda c: c.data.startswith("edit_"))
-async def process_edit_callback(callback_query: types.CallbackQuery, state: FSMContext):
-    """
-    Обробка кнопки редагування оголошення.
-    callback_data формату: edit_{ad_id}_{field}
-    """
-    parts = callback_query.data.split("_")
-    if len(parts) != 3:
-        await callback_query.answer("Неправильний формат callback", show_alert=True)
-        return
-
-    ad_id = int(parts[1])
-    field = parts[2]  # title, description, contacts, district
-
-    # Зберігаємо дані у state
-    await state.update_data(ad_id=ad_id, field=field)
-    await EditAdForm.value.set()
-
-    # Питаємо нове значення
-    await callback_query.message.answer(f"✏️ Введіть нове значення для поля '{field}':")
+async def process_edit_menu(callback_query: types.CallbackQuery):
+    ad_id = int(callback_query.data.split("_")[1])
+    kb = InlineKeyboardMarkup(row_width=2)
+    kb.add(
+        InlineKeyboardButton("🏷 Заголовок", callback_data=f"editfield_title_{ad_id}"),
+        InlineKeyboardButton("📝 Опис", callback_data=f"editfield_description_{ad_id}"),
+        InlineKeyboardButton("📞 Контакти", callback_data=f"editfield_contacts_{ad_id}"),
+        InlineKeyboardButton("📍 Район", callback_data=f"editfield_district_{ad_id}")
+    )
+    await callback_query.message.answer(f"✏️ Виберіть поле для редагування #{ad_id}:", reply_markup=kb)
     await callback_query.answer()
 
+# -------------------------------
+# Користувач обрав конкретне поле
+@dp.callback_query_handler(lambda c: c.data.startswith("editfield_"))
+async def process_edit_field(callback_query: types.CallbackQuery, state: FSMContext):
+    parts = callback_query.data.split("_")
+    field = parts[1]
+    ad_id = int(parts[2])
+    await state.update_data(ad_id=ad_id, field=field)
+    await EditAdForm.value.set()
+    await callback_query.message.answer(f"Введіть нове значення для поля '{field}':")
+    await callback_query.answer()
+
+# -------------------------------
+# Користувач ввів нове значення для поля
 @dp.message_handler(state=EditAdForm.value)
 async def process_edit_value(message: types.Message, state: FSMContext):
-    """
-    Обробка введеного нового значення для редагованого поля.
-    """
     data = await state.get_data()
     ad_id = data.get("ad_id")
     field = data.get("field")
-    new_value = message.text.strip()
 
-    # Перевірка довжини та заборонених слів для деяких полів
-    if field == "title" and len(new_value) > 200:
-        await message.answer("❌ Заголовок занадто довгий (макс 200 символів)")
-        return
-    if field == "description" and len(new_value) > 2000:
-        await message.answer("❌ Опис занадто довгий (макс 2000 символів)")
-        return
-    if field == "contacts" and len(new_value) > 200:
-        await message.answer("❌ Контакти занадто довгі (макс 200 символів)")
-        return
-
-    valid, error = validate_input(new_value)
-    if not valid:
-        await message.answer(error)
-        return
-
-    # Оновлюємо базу
-    cursor.execute(f"UPDATE ads SET {field}=? WHERE id=?", (new_value, ad_id))
+    # Оновлюємо базу даних
+    cursor.execute(f"UPDATE ads SET {field}=? WHERE id=?", (message.text, ad_id))
     conn.commit()
 
     # Отримуємо оновлене оголошення
@@ -669,7 +656,7 @@ async def process_edit_value(message: types.Message, state: FSMContext):
     """, (ad_id,))
     ad = cursor.fetchone()
     if not ad:
-        await message.answer("❌ Оголошення не знайдено")
+        await message.answer("❌ Оголошення не знайдено.")
         await state.finish()
         return
 
@@ -690,18 +677,16 @@ async def process_edit_value(message: types.Message, state: FSMContext):
 
     # Оновлюємо повідомлення у групі модераторів
     moder_chat_id = int(os.getenv("MODERATORS_CHAT_ID"))
-    try:
-        await bot.edit_message_text(
-            chat_id=moder_chat_id,
-            message_id=moder_message_id,
-            text=moder_text,
-            reply_markup=kb
-        )
-    except Exception as e:
-        await message.answer(f"⚠️ Не вдалося оновити повідомлення модератора: {e}")
+    await bot.edit_message_text(
+        chat_id=moder_chat_id,
+        message_id=moder_message_id,
+        text=moder_text,
+        reply_markup=kb
+    )
 
     await message.answer(f"✅ Поле '{field}' успішно оновлено!")
     await state.finish()
+
 # -------------------------------
 # 🔹 Inline handler для пересилань
 # -------------------------------
