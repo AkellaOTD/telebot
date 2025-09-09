@@ -660,7 +660,7 @@ async def bind_thread(message: types.Message):
 @dp.message_handler(commands=["blacklist"])
 async def cmd_blacklist(message: types.Message):
     # Доступ тільки для адмінів
-    if message.chat.id != int(os.getenv("ADMIN_GROUP_ID")):
+    if message.chat.id != int(os.getenv("MODERATORS_CHAT_ID")):
         await message.answer("⛔ Ця команда доступна лише в адмін-групі")
         return
 
