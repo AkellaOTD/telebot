@@ -454,14 +454,6 @@ async def process_contacts(message: types.Message, state: FSMContext):
 
     moder_chat_id, moder_thread_id = row
 
-    # Відправляємо у відповідну гілку
-    msg = await bot.send_message(
-        chat_id=moder_chat_id,
-        message_thread_id=moder_thread_id,
-        text=moder_text,
-        reply_markup=kb
-    )
-
     if photos:
         photos = photos.split(",")
         if len(photos) == 1:
@@ -541,7 +533,7 @@ async def process_reject_reason(callback_query: types.CallbackQuery):
     cursor.execute("SELECT user_id FROM ads WHERE id=?", (ad_id,))
     user_id = cursor.fetchone()[0]
 
-    kb = ReplyKeyboardMarkup(resize_keyboard=True).add("📢 Подати оголошення")
+    kb = ReplyKeyboardMarkup(resize_keyboard=True).add("📢 Подати оголошення", "ℹ️ FAQ","📋 Мої оголошення")
 
     await bot.send_message(
         user_id,
@@ -616,7 +608,7 @@ async def process_publish(callback_query: types.CallbackQuery):
             reply_markup=pub_kb
         )
 
-    kb = ReplyKeyboardMarkup(resize_keyboard=True).add("📢 Подати оголошення")
+    kb = ReplyKeyboardMarkup(resize_keyboard=True).add("📢 Подати оголошення","📋 Мої оголошення")
     await bot.send_message(user_id, "✅ Ваше оголошення успішно опубліковане!", reply_markup=kb)
     await callback_query.answer("Оголошення опубліковане ✅")
     log_admin_action(callback_query.from_user.id, callback_query.from_user.username, "publish", ad_id, chat_id, thread_id)
