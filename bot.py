@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS ads (
     contacts TEXT,
     is_published INTEGER DEFAULT 0,
     is_rejected INTEGER DEFAULT 0,
+    is_queued INTEGER DEFAULT 0,
     rejection_reason TEXT,
     moder_message_id INTEGER,
     shares INTEGER DEFAULT 0,
@@ -96,6 +97,14 @@ CREATE TABLE IF NOT EXISTS admin_logs (
     chat_id INTEGER,
     thread_id INTEGER,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
+""")
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS blacklist (
+    user_id INTEGER PRIMARY KEY,
+    username TEXT,
+    first_name TEXT,
+    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )
 """)
 
@@ -144,11 +153,12 @@ def faq_text():
     return "\n\n".join(lines)
 
 def get_moder_keyboard(ad_id: int, user_id: int, username: str | None):
-    kb = InlineKeyboardMarkup(row_width=3)
+    kb = InlineKeyboardMarkup(row_width=2)
     kb.add(
-        InlineKeyboardButton("✅ Опублікувати", callback_data=f"publish_{ad_id}"),
+        InlineKeyboardButton("✅ Опублікувати зараз", callback_data=f"publish_{ad_id}"),
         InlineKeyboardButton("⏳ Додати в чергу", callback_data=f"queue_{ad_id}"),
-        InlineKeyboardButton("❌ Відхилити", callback_data=f"reject_{ad_id}")
+        InlineKeyboardButton("❌ Відхилити", callback_data=f"reject_{ad_id}"),
+        InlineKeyboardButton("🚫 Чорний список", callback_data=f"blacklist_{ad_id}")
     )
     if username:
         kb.add(InlineKeyboardButton(f"👤 @{username}", url=f"https://t.me/{username}"))
@@ -211,6 +221,10 @@ async def handle_new_ad_button(message: types.Message, state: FSMContext):
 # 🔹 /create (FSM) — тепер викликається тільки через кнопку
 # -------------------------------
 async def cmd_create(message: types.Message, state: FSMContext):
+    cursor.execute("SELECT 1 FROM blacklist WHERE user_id=?", (message.from_user.id,))
+    if cursor.fetchone():
+        await message.answer("🚫 Ви заблоковані та не можете подавати оголошення.")
+        return
     cursor.execute("SELECT accepted_rules FROM users WHERE user_id = ?", (message.from_user.id,))
     user = cursor.fetchone()
     if not user or not user[0]:
@@ -525,10 +539,60 @@ async def process_queue(callback_query: types.CallbackQuery):
         callback_query.from_user.id,
         f"⏳ Оголошення #{ad_id} додано у чергу на публікацію"
     )
-    kb = ReplyKeyboardMarkup(resize_keyboard=True).add("📢 Подати оголошення")
-    await bot.send_message(user_id, "✅ Ваше оголошення додано до черги на публікацію!", reply_markup=kb)
+    cursor.execute("SELECT user_id FROM ads WHERE id=?", (ad_id,))
+    row = cursor.fetchone()
+    if row:
+        user_id = row[0]
+        kb = ReplyKeyboardMarkup(resize_keyboard=True).add("📢 Подати оголошення")
+        await bot.send_message(user_id, "✅ Ваше оголошення додано до черги на публікацію!", reply_markup=kb)
 
     log_admin_action(callback_query.from_user.id, callback_query.from_user.username, "queue_ad", ad_id)
+
+@dp.callback_query_handler(lambda c: c.data.startswith("blacklist_"))
+async def process_blacklist(callback_query: types.CallbackQuery):
+    ad_id = int(callback_query.data.split("_")[1])
+
+    # Отримуємо користувача з БД
+    cursor.execute("SELECT user_id, username, first_name FROM ads WHERE id=?", (ad_id,))
+    row = cursor.fetchone()
+
+    if not row:
+        await callback_query.answer("Оголошення не знайдено ❌", show_alert=True)
+        return
+
+    user_id, username, first_name = row
+
+    # Додаємо у blacklist
+    cursor.execute("INSERT OR IGNORE INTO blacklist (user_id, username, first_name) VALUES (?, ?, ?)",
+                   (user_id, username, first_name))
+    conn.commit()
+
+    await callback_query.answer("🚫 Користувач доданий у чорний список")
+    await bot.send_message(callback_query.from_user.id,
+                           f"Користувач {first_name} (@{username}) [{user_id}] доданий у чорний список")
+
+    # Логування дії
+    log_admin_action(callback_query.from_user.id,
+                     callback_query.from_user.username,
+                     "blacklist_user",
+                     ad_id)
+
+@dp.callback_query_handler(lambda c: c.data.startswith("unblacklist_"))
+async def process_unblacklist(callback_query: types.CallbackQuery):
+    user_id = int(callback_query.data.split("_")[1])
+
+    cursor.execute("DELETE FROM blacklist WHERE user_id=?", (user_id,))
+    conn.commit()
+
+    await callback_query.answer("✅ Користувача розблоковано")
+    await callback_query.message.edit_text(f"Користувача <code>{user_id}</code> розблоковано", parse_mode="HTML")
+
+    # Логування
+    log_admin_action(callback_query.from_user.id,
+                     callback_query.from_user.username,
+                     "unblacklist_user",
+                     None)
+    
 # -------------------------------
 # 🔹 Inline handler для пересилань
 # -------------------------------
@@ -592,6 +656,30 @@ async def bind_thread(message: types.Message):
 
     await message.reply(f"✅ Гілку збережено як: *{title}*", parse_mode="Markdown")
     log_admin_action(message.from_user.id, message.from_user.username, "bind_thread", chat_id=chat_id, thread_id=thread_id)
+
+@dp.message_handler(commands=["blacklist"])
+async def cmd_blacklist(message: types.Message):
+    # Доступ тільки для адмінів
+    if message.from_user.id not in ADMIN_IDS:  
+        await message.answer("⛔ Доступ заборонено")
+        return
+
+    cursor.execute("SELECT user_id, username, first_name, added_at FROM blacklist ORDER BY added_at DESC")
+    users = cursor.fetchall()
+
+    if not users:
+        await message.answer("✅ Чорний список порожній")
+        return
+
+    text = "<b>🚫 Чорний список користувачів:</b>\n\n"
+    kb = InlineKeyboardMarkup(row_width=1)
+
+    for user_id, username, first_name, added_at in users:
+        uname = f"@{username}" if username else ""
+        text += f"👤 <b>{first_name}</b> {uname} (<code>{user_id}</code>) — {added_at}\n"
+        kb.add(InlineKeyboardButton(f"❌ Розблокувати {first_name}", callback_data=f"unblacklist_{user_id}"))
+
+    await message.answer(text, parse_mode="HTML", reply_markup=kb)
 
 # -------------------------------
 # 🔹 Статистика
