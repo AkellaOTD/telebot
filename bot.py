@@ -457,7 +457,7 @@ async def process_contacts(message: types.Message, state: FSMContext):
     if photos:
         photos = photos.split(",")
         if len(photos) == 1:
-            await bot.send_photo(
+            msg = await bot.send_photo(
                 chat_id=moder_chat_id,
                 message_thread_id=moder_thread_id,
                 photo=photos[0],
@@ -471,14 +471,14 @@ async def process_contacts(message: types.Message, state: FSMContext):
                 message_thread_id=moder_thread_id,
                 media=media
             )
-            await bot.send_message(
+            msg = await bot.send_message(
                 chat_id=moder_chat_id,
                 message_thread_id=moder_thread_id,
                 text=moder_text,
                 reply_markup=kb
             )
     else:
-        await bot.send_message(
+        msg = await bot.send_message(
             chat_id=moder_chat_id,
             message_thread_id=moder_thread_id,
             text=moder_text,
