@@ -428,11 +428,11 @@ async def process_contacts(message: types.Message, state: FSMContext):
     )
 
     if photos:
-    for file_id in photos.split(","):
-        try:
-            await bot.send_photo(chat_id=int(os.getenv("ADMIN_GROUP_ID")), photo=file_id)
-        except Exception as e:
-            print(f"Не вдалося відправити фото {file_id}: {e}")
+        for file_id in photos.split(","):
+            try:
+                await bot.send_photo(chat_id=int(os.getenv("ADMIN_GROUP_ID")), photo=file_id)
+            except Exception as e:
+                print(f"Не вдалося відправити фото {file_id}: {e}")
             
     cursor.execute("UPDATE ads SET moder_message_id=? WHERE id=?", (msg.message_id, ad_id))
     conn.commit()
