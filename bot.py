@@ -248,6 +248,7 @@ async def my_ads(message: types.Message):
             f"🏷 Заголовок: {title}\n"
             f"📝 Опис: {description}\n"
             f"📞 Контакти: {contacts}\n"
+            f"Статус: {status}\n"
         )
 
         # Якщо є фото — показуємо перше
