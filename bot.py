@@ -314,36 +314,50 @@ async def process_description(message: types.Message, state: FSMContext):
 
 @dp.message_handler(content_types=["photo", "text"], state=AdForm.photos)
 async def process_photos(message: types.Message, state: FSMContext):
+    # Отримуємо поточні дані зі стану
+    data = await state.get_data()
+    photos_data = data.get("photos_data", [])  # список словників {file_id, unique_id}
+
+    # Якщо користувач натиснув FAQ
     if message.text == "ℹ️ FAQ":
         await message.answer(faq_text(), reply_markup=main_menu_kb())
         return
 
-        data = await state.get_data()
-    photos_data = data.get("photos", [])  # зберігаємо список словників {file_id, unique_id}
+    # Якщо користувач натиснув "Пропустити" або "Готово"
+    if message.content_type == "text":
+        if message.text.lower() in ["пропустити", "готово"]:
+            # Формуємо рядок з file_id (для збереження у БД)
+            photos_str = ",".join([p["file_id"] for p in photos_data])
+            await state.update_data(photos=photos_str)
 
+            await AdForm.next()
+            kb = ReplyKeyboardMarkup(resize_keyboard=True)
+            kb.add("ℹ️ FAQ")
+            await message.answer("Введіть контактну інформацію (до 200 символів):", reply_markup=kb)
+            return
+        else:
+            await message.answer("❌ Надішліть фото або натисніть «Готово» / «Пропустити».")
+            return
+
+    # Якщо користувач надсилає фото
     if message.content_type == "photo":
         file_id = message.photo[-1].file_id
         unique_id = message.photo[-1].file_unique_id
 
-        # Перевіряємо дублікат
+        # Перевірка на дубль
         if unique_id not in [p["unique_id"] for p in photos_data]:
             photos_data.append({"file_id": file_id, "unique_id": unique_id})
             await state.update_data(photos_data=photos_data)
-            kb = ReplyKeyboardMarkup(resize_keyboard=True)
-            kb.add("Готово", "ℹ️ FAQ")
-            await message.answer(f"Фото додано ✅ Всього фото: {len(photos_data)}. Якщо все — натисніть «Готово».", reply_markup=kb)
-        else:
-            await message.answer("❌ Це фото вже додано раніше, дублікат ігнорується.")
 
-    elif message.text.lower() == "пропустити" or message.text.lower() == "готово":
-        # Формуємо рядок з file_id тільки унікальних фото
-        photos_str = ",".join([p["file_id"] for p in photos_data])
-        await state.update_data(photos=photos_str)
-        await AdForm.next()
-        kb = ReplyKeyboardMarkup(resize_keyboard=True)
-        kb.add("ℹ️ FAQ")
-        await message.answer("Введіть контактну інформацію (до 200 символів):", reply_markup=kb)
-        
+            kb = ReplyKeyboardMarkup(resize_keyboard=True)
+            kb.add("Готово", "Пропустити", "ℹ️ FAQ")
+            await message.answer(
+                f"Фото додано ✅ Всього фото: {len(photos_data)}. Якщо все — натисніть «Готово».",
+                reply_markup=kb
+            )
+        else:
+            await message.answer("⚠️ Це фото вже було додано раніше.")
+            
 @dp.message_handler(state=AdForm.contacts)
 async def process_contacts(message: types.Message, state: FSMContext):
     if len(message.text) > 200:
