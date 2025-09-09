@@ -232,7 +232,7 @@ async def my_ads(message: types.Message):
         return
 
     for ad in ads:
-        ad_id, title, description, contacts, photos, status, is_published, is_rejected, is_queued = ad
+        ad_id, title, description, contacts, photos, is_published, is_rejected, is_queued = ad
         
         if is_published:
             status = "опубліковано"
