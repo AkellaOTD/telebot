@@ -223,7 +223,7 @@ async def my_ads(message: types.Message):
     conn = sqlite3.connect("bot.db")
     cursor = conn.cursor()
 
-    cursor.execute("SELECT id, title, description, price, contacts, photos, status FROM ads WHERE user_id=?", (message.from_user.id,))
+    cursor.execute("SELECT id, title, description, contacts, photos, status FROM ads WHERE user_id=?", (message.from_user.id,))
     ads = cursor.fetchall()
     conn.close()
 
@@ -232,13 +232,12 @@ async def my_ads(message: types.Message):
         return
 
     for ad in ads:
-        ad_id, title, description, price, contacts, photos, status = ad
+        ad_id, title, description, contacts, photos, status = ad
 
         ad_text = (
             f"📌 <b>Оголошення #{ad_id}</b>\n\n"
             f"<b>Заголовок:</b> {title}\n"
             f"<b>Опис:</b> {description}\n"
-            f"<b>Ціна:</b> {price}\n"
             f"<b>Контакти:</b> {contacts}\n"
             f"<b>Статус:</b> {status}"
         )
