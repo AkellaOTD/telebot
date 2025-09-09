@@ -357,7 +357,7 @@ async def process_photos(message: types.Message, state: FSMContext):
             )
         else:
             await message.answer("⚠️ Це фото вже було додано раніше.")
-            
+
 @dp.message_handler(state=AdForm.contacts)
 async def process_contacts(message: types.Message, state: FSMContext):
     if len(message.text) > 200:
@@ -427,6 +427,13 @@ async def process_contacts(message: types.Message, state: FSMContext):
         reply_markup=kb
     )
 
+    if photos:
+    for file_id in photos.split(","):
+        try:
+            await bot.send_photo(chat_id=int(os.getenv("ADMIN_GROUP_ID")), photo=file_id)
+        except Exception as e:
+            print(f"Не вдалося відправити фото {file_id}: {e}")
+            
     cursor.execute("UPDATE ads SET moder_message_id=? WHERE id=?", (msg.message_id, ad_id))
     conn.commit()
 
