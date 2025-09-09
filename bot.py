@@ -183,7 +183,7 @@ def get_user_button(user_id: int, username: str | None):
 # -------------------------------
 # 🔹 /start
 # -------------------------------
-@dp.message_handler(commands="Почати")
+@dp.message_handler(commands="start")
 async def cmd_start(message: types.Message):
     cursor.execute("SELECT accepted_rules FROM users WHERE user_id = ?", (message.from_user.id,))
     user = cursor.fetchone()
@@ -279,8 +279,7 @@ async def cmd_create(message: types.Message, state: FSMContext):
     cursor.execute("SELECT accepted_rules FROM users WHERE user_id = ?", (message.from_user.id,))
     user = cursor.fetchone()
     if not user or not user[0]:
-        kb = ReplyKeyboardMarkup(resize_keyboard=True).add("Почати")
-        await message.answer("⚠️ Спершу потрібно погодитись із правилами! Натисніть Почати", reply_markup=kb)
+        await message.answer("⚠️ Спершу потрібно погодитись із правилами! Натисніть /start")
         return
 
     cursor.execute("SELECT title FROM threads WHERE chat_id=?", (int(os.getenv("MODERATORS_CHAT_ID")),))
