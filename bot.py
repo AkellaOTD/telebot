@@ -638,6 +638,11 @@ async def process_edit_value(message: types.Message, state: FSMContext):
     ad_id = data.get("ad_id")
     field = data.get("field")
 
+    if not ad_id or not field:
+        await message.answer("❌ Виникла помилка. Спробуйте ще раз.")
+        await state.finish()
+        return
+
     if field == "district" and message.text not in DISTRICTS:
         await message.answer(f"❌ Недопустимий район. Доступні: {', '.join(DISTRICTS)}")
         return
@@ -647,16 +652,29 @@ async def process_edit_value(message: types.Message, state: FSMContext):
         await message.answer(error)
         return
 
+    # Оновлюємо оголошення
     cursor.execute(f"UPDATE ads SET {field}=? WHERE id=?", (message.text, ad_id))
     conn.commit()
 
+    # Отримуємо актуальні дані для модератора
     cursor.execute("""
         SELECT user_id, username, first_name, category, district, title, description, contacts, moder_message_id
         FROM ads WHERE id=?
     """, (ad_id,))
     ad = cursor.fetchone()
+    if not ad:
+        await message.answer("❌ Оголошення не знайдено.")
+        await state.finish()
+        return
+
     user_id, username, first_name, category, district, title, description, contacts, moder_message_id = ad
 
+    if not moder_message_id:
+        await message.answer("⚠️ Попереднє повідомлення модератора не знайдено. Воно не оновилось.")
+        await state.finish()
+        return
+
+    # Формуємо оновлений текст
     moder_text = (
         f"📢 ОНОВЛЕНЕ ОГОЛОШЕННЯ #{ad_id}\n\n"
         f"👤 Користувач: {first_name or ''} (@{username}) [ID: {user_id}]\n\n"
@@ -666,13 +684,21 @@ async def process_edit_value(message: types.Message, state: FSMContext):
         f"📝 Опис: {description}\n"
         f"📞 Контакти: {contacts}\n"
     )
-    kb = get_moder_keyboard(ad_id, user_id, username)
-    try:
-        await bot.edit_message_text(chat_id=MODERATORS_CHAT_ID, message_id=moder_message_id, text=moder_text, reply_markup=kb)
-    except Exception as e:
-        await message.answer(f"⚠️ Не вдалося оновити повідомлення у групі: {e}")
 
-    await message.answer(f"✅ Поле '{field}' успішно оновлено!")
+    kb = get_moder_keyboard(ad_id, user_id, username)
+
+    # Оновлюємо повідомлення у модераторській групі
+    try:
+        await bot.edit_message_text(
+            chat_id=MODERATORS_CHAT_ID,
+            message_id=moder_message_id,
+            text=moder_text,
+            reply_markup=kb
+        )
+        await message.answer(f"✅ Поле '{field}' успішно оновлено та повідомлення модератору оновлено!")
+    except Exception as e:
+        await message.answer(f"⚠️ Не вдалося оновити повідомлення модератора: {e}")
+
     await state.finish()
 
 # -------------------------------
