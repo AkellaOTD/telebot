@@ -146,7 +146,7 @@ def validate_input(text: str) -> tuple[bool, str]:
 # -------------------------------
 def main_menu_kb():
     kb = ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.add("📢 Подати оголошення", "ℹ️ FAQ")
+    kb.add("📢 Подати оголошення", "ℹ️ FAQ","📋 Мої оголошення")
     return kb
 
 def faq_text():
@@ -217,6 +217,41 @@ async def rules_answer(message: types.Message):
 @dp.message_handler(lambda msg: msg.text == "ℹ️ FAQ")
 async def handle_faq(message: types.Message):
     await message.answer(faq_text(), reply_markup=main_menu_kb())
+
+@dp.message_handler(lambda m: m.text == "📋 Мої оголошення")
+async def my_ads(message: types.Message):
+    conn = sqlite3.connect("ads.db")
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT id, title, description, price, contacts, photos, status FROM ads WHERE user_id=?", (message.from_user.id,))
+    ads = cursor.fetchall()
+    conn.close()
+
+    if not ads:
+        await message.answer("У вас ще немає оголошень 📝", reply_markup=main_menu_kb())
+        return
+
+    for ad in ads:
+        ad_id, title, description, price, contacts, photos, status = ad
+
+        ad_text = (
+            f"📌 <b>Оголошення #{ad_id}</b>\n\n"
+            f"<b>Заголовок:</b> {title}\n"
+            f"<b>Опис:</b> {description}\n"
+            f"<b>Ціна:</b> {price}\n"
+            f"<b>Контакти:</b> {contacts}\n"
+            f"<b>Статус:</b> {status}"
+        )
+
+        # Якщо є фото — показуємо перше
+        if photos:
+            first_photo = photos.split(",")[0]
+            try:
+                await bot.send_photo(message.chat.id, first_photo, caption=ad_text, parse_mode="HTML")
+            except:
+                await message.answer(ad_text, parse_mode="HTML")
+        else:
+            await message.answer(ad_text, parse_mode="HTML")
 
 # -------------------------------
 # 🔹 Обробник кнопки "Подати оголошення"
@@ -428,12 +463,32 @@ async def process_contacts(message: types.Message, state: FSMContext):
     )
 
     if photos:
-        for file_id in photos.split(","):
-            try:
-                await bot.send_photo(chat_id=int(os.getenv("ADMIN_GROUP_ID")), photo=file_id)
-            except Exception as e:
-                print(f"Не вдалося відправити фото {file_id}: {e}")
-            
+        photos = photos.split(",")
+        if len(photos) == 1:
+            await bot.send_photo(
+                chat_id=MODERATORS_CHAT_ID,
+                message_thread_id=thread_id,
+                photo=photos[0],
+                caption=pub_text,
+                reply_markup=pub_kb
+            )
+        else:
+            media = [types.InputMediaPhoto(p) for p in photos[:10]]
+            await bot.send_media_group(chat_id=chat_id, message_thread_id=thread_id, media=media)
+            await bot.send_message(
+                chat_id=MODERATORS_CHAT_ID,
+                message_thread_id=thread_id,
+                text=pub_text,
+                reply_markup=pub_kb
+            )
+    else:
+        await bot.send_message(
+            chat_id=MODERATORS_CHAT_ID,
+            message_thread_id=thread_id,
+            text=pub_text,
+            reply_markup=pub_kb
+        )
+
     cursor.execute("UPDATE ads SET moder_message_id=? WHERE id=?", (msg.message_id, ad_id))
     conn.commit()
 
