@@ -5,3 +5,4 @@ pydantic==2.9.2
 python-dotenv==1.0.1
 SQLAlchemy==2.0.35
 aiosqlite==0.20.0
+python-multipart==0.0.6
