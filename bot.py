@@ -26,7 +26,7 @@ TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_HOST = os.getenv("WEBHOOK_HOST")
 WEBHOOK_PATH = "/webhook"
 WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
-
+DB_PATH = "bot.db"
 MODERATORS_CHAT_ID = os.getenv("MODERATORS_CHAT_ID")
 if not MODERATORS_CHAT_ID:
     raise ValueError("❌ MODERATORS_CHAT_ID не знайдено у .env")
@@ -49,7 +49,7 @@ app = FastAPI()
 # -------------------------------
 # 🔹 База даних
 # -------------------------------
-conn = sqlite3.connect("bot.db", check_same_thread=False)
+conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 cursor = conn.cursor()
 
 cursor.execute("""
