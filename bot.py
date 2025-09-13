@@ -1016,6 +1016,7 @@ async def restore_db(file: UploadFile = File(...)):
     """
     Приймає SQLite файл та замінює поточну базу.
     """
+    global conn, cursor  # оголошуємо глобальні змінні спочатку
     try:
         # Закриваємо поточне з'єднання
         conn.close()
@@ -1029,7 +1030,6 @@ async def restore_db(file: UploadFile = File(...)):
         shutil.move(temp_path, DB_PATH)
 
         # Перепідключаємося
-        global conn, cursor
         conn = sqlite3.connect(DB_PATH, check_same_thread=False)
         cursor = conn.cursor()
 
