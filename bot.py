@@ -1,5 +1,6 @@
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import FastAPI, Request, UploadFile, File
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, JSONResponse
+import shutil
 import os
 import re
 import sqlite3
@@ -1036,7 +1037,7 @@ async def restore_db(file: UploadFile = File(...)):
         return JSONResponse({"status": "success", "message": "База відновлена з бекапу"})
     except Exception as e:
         return JSONResponse({"status": "error", "message": str(e)})
-        
+
 # -------------------------------
 # 🔹 Локальний запуск
 # -------------------------------
