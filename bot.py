@@ -1001,6 +1001,42 @@ async def get_logs(
     html += "</table></body></html>"
     return HTMLResponse(content=html)
 
+@app.get("/backup")
+async def backup_db():
+    """
+    Повертає файл бази даних для скачування.
+    """
+    return FileResponse(DB_PATH, filename="bot_backup.db", media_type="application/octet-stream")
+
+# -------------------------------
+# 🔹 Ендпоінт для відновлення з бекапу
+# -------------------------------
+@app.post("/restore")
+async def restore_db(file: UploadFile = File(...)):
+    """
+    Приймає SQLite файл та замінює поточну базу.
+    """
+    try:
+        # Закриваємо поточне з'єднання
+        conn.close()
+
+        # Зберігаємо завантажений файл як тимчасовий
+        temp_path = f"temp_{DB_PATH}"
+        with open(temp_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        # Замінюємо стару базу новою
+        shutil.move(temp_path, DB_PATH)
+
+        # Перепідключаємося
+        global conn, cursor
+        conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+        cursor = conn.cursor()
+
+        return JSONResponse({"status": "success", "message": "База відновлена з бекапу"})
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)})
+        
 # -------------------------------
 # 🔹 Локальний запуск
 # -------------------------------
