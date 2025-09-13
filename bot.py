@@ -1011,14 +1011,32 @@ async def backup_db():
 # -------------------------------
 # 🔹 Ендпоінт для відновлення з бекапу
 # -------------------------------
+from fastapi import Request
+
+@app.get("/restore")
+async def restore_form():
+    html_content = """
+    <html>
+        <head>
+            <title>Restore DB</title>
+        </head>
+        <body>
+            <h2>Відновлення бази даних</h2>
+            <form action="/restore" method="post" enctype="multipart/form-data">
+                <input type="file" name="file" accept=".db">
+                <button type="submit">Відновити</button>
+            </form>
+        </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
+
 @app.post("/restore")
 async def restore_db(file: UploadFile = File(...)):
-    """
-    Приймає SQLite файл та замінює поточну базу.
-    """
-    global conn, cursor  # оголошуємо глобальні змінні спочатку
+    global conn, cursor
     try:
         # Закриваємо поточне з'єднання
+        conn.close()
 
         # Зберігаємо завантажений файл як тимчасовий
         temp_path = f"temp_{DB_PATH}"
@@ -1032,10 +1050,10 @@ async def restore_db(file: UploadFile = File(...)):
         conn = sqlite3.connect(DB_PATH, check_same_thread=False)
         cursor = conn.cursor()
 
-        return JSONResponse({"status": "success", "message": "База відновлена з бекапу"})
+        return HTMLResponse("<h3>✅ База успішно відновлена!</h3>")
     except Exception as e:
-        return JSONResponse({"status": "error", "message": str(e)})
-
+        return HTMLResponse(f"<h3>❌ Сталася помилка: {e}</h3>")
+        
 # -------------------------------
 # 🔹 Локальний запуск
 # -------------------------------
