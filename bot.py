@@ -221,7 +221,6 @@ async def handle_faq(message: types.Message):
 async def my_ads(message: types.Message):
     cursor.execute("SELECT id, title, description, contacts, category, district, photos, is_published, is_rejected, is_queued FROM ads WHERE user_id=?", (message.from_user.id,))
     ads = cursor.fetchall()
-    conn.close()
 
     if not ads:
         await message.answer("У вас ще немає оголошень 📝", reply_markup=main_menu_kb())
@@ -1020,7 +1019,6 @@ async def restore_db(file: UploadFile = File(...)):
     global conn, cursor  # оголошуємо глобальні змінні спочатку
     try:
         # Закриваємо поточне з'єднання
-        conn.close()
 
         # Зберігаємо завантажений файл як тимчасовий
         temp_path = f"temp_{DB_PATH}"
