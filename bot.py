@@ -1,5 +1,5 @@
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Request, Form, Depends
+from fastapi.responses import HTMLResponse, RedirectResponse
 import os
 import re
 import sqlite3
@@ -26,6 +26,8 @@ TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_HOST = os.getenv("WEBHOOK_HOST")
 WEBHOOK_PATH = "/webhook"
 WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
+
+SECURE_TOKEN = os.getenv("SECURE_TOKEN", "supersecret")
 
 MODERATORS_CHAT_ID = os.getenv("MODERATORS_CHAT_ID")
 if not MODERATORS_CHAT_ID:
@@ -166,7 +168,7 @@ def get_moder_keyboard(ad_id: int, user_id: int, username: str | None):
         InlineKeyboardButton("🚫 Чорний список", callback_data=f"blacklist_{ad_id}")
     )
     kb.add(
-        InlineKeyboardButton("✏️ Редагувати", callback_data=f"edit_{ad_id}"),
+        InlineKeyboardButton("✏️ Редагувати", url=f"{BASE_URL}/edit_ad/{ad_id}?token={SECURE_TOKEN}"),
     )
     if username:
         kb.add(InlineKeyboardButton(f"👤 @{username}", url=f"https://t.me/{username}"))
@@ -1005,6 +1007,72 @@ async def get_logs(
 
     html += "</table></body></html>"
     return HTMLResponse(content=html)
+
+@app.get("/edit_ad/{ad_id}", response_class=HTMLResponse)
+async def edit_ad_form(ad_id: int, token: str):
+    if token != SECURE_TOKEN:
+        return HTMLResponse("<h3>⛔ Доступ заборонено</h3>", status_code=403)
+
+    conn = sqlite3.connect("bot_database.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, category, district, title, description, photo, contacts FROM ads WHERE id=?", (ad_id,))
+    ad = cursor.fetchone()
+    conn.close()
+
+    if not ad:
+        return HTMLResponse("<h3>Оголошення не знайдено</h3>", status_code=404)
+
+    html_content = f"""
+    <h2>Редагування оголошення #{ad[0]}</h2>
+    <form method="post">
+        <label>Категорія:</label><br>
+        <input type="text" name="category" value="{ad[1]}"><br><br>
+
+        <label>Район:</label><br>
+        <input type="text" name="district" value="{ad[2]}"><br><br>
+
+        <label>Заголовок:</label><br>
+        <input type="text" name="title" value="{ad[3]}"><br><br>
+
+        <label>Опис:</label><br>
+        <textarea name="description">{ad[4]}</textarea><br><br>
+
+        <label>Фото (URL або file_id):</label><br>
+        <input type="text" name="photo" value="{ad[5]}"><br><br>
+
+        <label>Контакти:</label><br>
+        <input type="text" name="contacts" value="{ad[6]}"><br><br>
+
+        <button type="submit">Зберегти</button>
+    </form>
+    """
+    return HTMLResponse(html_content)
+
+
+@app.post("/edit_ad/{ad_id}")
+async def edit_ad_submit(
+    ad_id: int,
+    token: str,
+    category: str = Form(...),
+    district: str = Form(...),
+    title: str = Form(...),
+    description: str = Form(...),
+    photo: str = Form(...),
+    contacts: str = Form(...)
+):
+    if token != SECURE_TOKEN:
+        return HTMLResponse("<h3>⛔ Доступ заборонено</h3>", status_code=403)
+
+    conn = sqlite3.connect("bot_database.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE ads SET category=?, district=?, title=?, description=?, photo=?, contacts=?
+        WHERE id=?
+    """, (category, district, title, description, photo, contacts, ad_id))
+    conn.commit()
+    conn.close()
+
+    return HTMLResponse("<h3>✅ Оголошення оновлено!</h3>")
 # -------------------------------
 # 🔹 Локальний запуск
 # -------------------------------
