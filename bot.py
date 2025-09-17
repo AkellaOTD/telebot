@@ -19,8 +19,12 @@ from aiogram.types import (
     InputTextMessageContent
 )
 import uvicorn
+from dotenv import load_dotenv
+from pathlib import Path
 
-load_dotenv()
+# Завантажуємо .env з тієї ж директорії, де bot.py
+env_path = Path(__file__).parent / ".env"
+load_dotenv(dotenv_path=env_path)
 # -------------------------------
 # 🔹 Конфіг
 # -------------------------------
