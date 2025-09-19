@@ -5,7 +5,6 @@ import sqlite3
 
 from aiogram import Bot, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.exceptions import TelegramRetryAfter, TelegramForbiddenError
 
 TOKEN = os.getenv("BOT_TOKEN")
 PUBLISH_CHAT_ID = int(os.getenv("PUBLISH_CHAT_ID"))
@@ -92,12 +91,6 @@ async def autopost_once():
                 ccursor.execute("UPDATE ads SET is_published=1, is_queued=0 WHERE id=?", (ad_id,))
                 conn.commit()
                 logging.info(f"✅ Автопостинг: оголошення #{ad_id} опубліковане")
-
-            except TelegramRetryAfter as e:
-                logging.warning(f"Flood control: sleep {e.timeout}s")
-                await asyncio.sleep(e.timeout)
-            except TelegramForbiddenError:
-                logging.error("❌ Бот заблокований у каналі/чаті")
             finally:
                 conn.close()
 
