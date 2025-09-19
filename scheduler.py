@@ -5,7 +5,7 @@ import sqlite3
 
 from aiogram import Bot, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.utils.exceptions import TelegramRetryAfter, TelegramForbiddenError
+from aiogram.exceptions import TelegramRetryAfter, TelegramForbiddenError
 
 TOKEN = os.getenv("BOT_TOKEN")
 PUBLISH_CHAT_ID = int(os.getenv("PUBLISH_CHAT_ID"))
