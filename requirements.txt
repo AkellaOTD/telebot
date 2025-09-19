@@ -26,3 +26,5 @@ databases==0.9.0
 
 # SSL / сертифікати
 certifi==2024.8.30
+
+magic-filter==1.0.7
