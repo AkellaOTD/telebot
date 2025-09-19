@@ -628,10 +628,6 @@ async def process_queue(callback_query: types.CallbackQuery):
     conn.commit()
 
     await callback_query.message.edit_reply_markup(reply_markup=None)
-    await bot.send_message(
-        callback_query.from_user.id,
-        f"⏳ Оголошення #{ad_id} додано у чергу на публікацію"
-    )
     cursor.execute("SELECT user_id FROM ads WHERE id=?", (ad_id,))
     row = cursor.fetchone()
     if row:
