@@ -1029,13 +1029,13 @@ async def list_ads():
     """
 
     for row in rows:
-        ad_id, username, first_name, category, district, title, description, contacts, created_at = row
+        ad_id, username, first_name, category, district, title, description, contacts, created_at, is_published, is_rejected, is_queued = row
         html += f"""
         <div class="ad">
             <div class="title">#{ad_id} {title}</div>
             <div class="meta">
                 👤 {first_name or ''} @{username or '-'} |
-                📂 {category} | 📍 {district} | 🕒 {created_at}
+                📂 {category} | 📍 {district} | 🕒 {created_at} | is_published - {is_published} | is_rejected - {is_rejected} | is_queued - {is_queued}
             </div>
             <div class="desc">{description}</div>
             <div class="meta">📞 {contacts}</div>
