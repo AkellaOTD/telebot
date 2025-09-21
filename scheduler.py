@@ -102,12 +102,13 @@ async def autopost_once():
                 # позначаємо як опубліковане
                 cursor.execute("UPDATE ads SET is_published=1, is_queued=0 WHERE id=?", (ad_id,))
                 conn.commit()
+                
                 kb = ReplyKeyboardMarkup(resize_keyboard=True).add("📢 Подати оголошення","📋 Мої оголошення")
                 bot.send_message(user_id, "✅ Ваше оголошення успішно опубліковане!", reply_markup=kb)
             finally:
                 conn.close()
+                asyncio.get_event_loop().run_until_complete(bot.session.close())
 
 if __name__ == "__main__":
     asyncio.run(autopost_once())
-    asyncio.get_event_loop().run_until_complete(bot.session.close())
-    conn.close()
+    
