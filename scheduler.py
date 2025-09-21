@@ -6,6 +6,9 @@ import sqlite3
 from aiogram import Bot, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
+env_path = Path(__file__).parent / ".env"
+load_dotenv(dotenv_path=env_path)
+
 TOKEN = os.getenv("BOT_TOKEN")
 PUBLISH_CHAT_ID = int(os.getenv("PUBLISH_CHAT_ID"))
 DB_PATH = "bot.db"
