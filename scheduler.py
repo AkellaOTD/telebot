@@ -94,7 +94,8 @@ async def autopost_once():
                 # позначаємо як опубліковане
                 cursor.execute("UPDATE ads SET is_published=1, is_queued=0 WHERE id=?", (ad_id,))
                 conn.commit()
-                logging.info(f"✅ Автопостинг: оголошення #{ad_id} опубліковане")
+                kb = ReplyKeyboardMarkup(resize_keyboard=True).add("📢 Подати оголошення","📋 Мої оголошення")
+                bot.send_message(user_id, "✅ Ваше оголошення успішно опубліковане!", reply_markup=kb)
             finally:
                 conn.close()
 
