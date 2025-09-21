@@ -1004,46 +1004,15 @@ async def get_logs(
 
 @app.get("/ads")
 async def list_ads():
-    cursor.execute("""
-        SELECT id, username, first_name, category, district, title, description, contacts, created_at
-        FROM ads
-        ORDER BY created_at DESC
-    """)
+    cursor.execute("SELECT * FROM ads ORDER BY created_at DESC")
     rows = cursor.fetchall()
 
-    html = """
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <title>Оголошення</title>
-        <style>
-            body { font-family: Arial, sans-serif; margin: 20px; background: #f8f9fa; }
-            .ad { border: 1px solid #ccc; padding: 15px; margin-bottom: 15px; border-radius: 8px; background: #fff; }
-            .title { font-size: 18px; font-weight: bold; color: #333; }
-            .meta { color: #555; font-size: 14px; margin-bottom: 10px; }
-            .desc { margin-top: 8px; font-size: 15px; }
-        </style>
-    </head>
-    <body>
-        <h2>📋 Всі оголошення</h2>
-    """
+    # Отримуємо назви колонок з cursor.description
+    columns = [col[0] for col in cursor.description]
 
-    for row in rows:
-        ad_id, username, first_name, category, district, title, description, contacts, created_at, is_published, is_rejected, is_queued = row
-        html += f"""
-        <div class="ad">
-            <div class="title">#{ad_id} {title}</div>
-            <div class="meta">
-                👤 {first_name or ''} @{username or '-'} |
-                📂 {category} | 📍 {district} | 🕒 {created_at} | is_published - {is_published} | is_rejected - {is_rejected} | is_queued - {is_queued}
-            </div>
-            <div class="desc">{description}</div>
-            <div class="meta">📞 {contacts}</div>
-        </div>
-        """
+    ads = [dict(zip(columns, row)) for row in rows]
 
-    html += "</body></html>"
-    return HTMLResponse(content=html)
+    return JSONResponse(content=ads)
 
 @app.get("/backup")
 async def backup_db():
