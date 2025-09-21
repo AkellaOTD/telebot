@@ -113,9 +113,9 @@ async def main():
     try:
         await autopost_once()
     finally:
-        if bot.session and not bot.session.closed:
-            await bot.session.close()
-
+        session = await bot.get_session()
+        if session and not session.closed:
+            await session.close()
 
 if __name__ == "__main__":
     asyncio.run(main())
