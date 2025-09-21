@@ -457,7 +457,10 @@ async def process_contacts(message: types.Message, state: FSMContext):
     row = cursor.fetchone()
 
     if not row:
-        await message.answer("❌ Для цієї категорії не знайдено гілки у групі модераторів")
+         kb = ReplyKeyboardMarkup(resize_keyboard=True).add(
+            "📢 Подати оголошення", "📋 Мої оголошення"
+        )
+        await bot.send_message(user_id, "❌ Щось пішло не так. Спробуйте пізніше", reply_markup=kb)
         return
 
     moder_chat_id, moder_thread_id = row
