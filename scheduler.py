@@ -109,3 +109,5 @@ async def autopost_once():
 
 if __name__ == "__main__":
     asyncio.run(autopost_once())
+    asyncio.get_event_loop().run_until_complete(bot.session.close())
+    conn.close()
