@@ -2,6 +2,7 @@ import os
 import logging
 import asyncio
 import sqlite3
+from dotenv import load_dotenv
 from pathlib import Path
 from aiogram import Bot, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
