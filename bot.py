@@ -457,7 +457,7 @@ async def process_contacts(message: types.Message, state: FSMContext):
     row = cursor.fetchone()
 
     if not row:
-         kb = ReplyKeyboardMarkup(resize_keyboard=True).add(
+        kb = ReplyKeyboardMarkup(resize_keyboard=True).add(
             "📢 Подати оголошення", "📋 Мої оголошення"
         )
         await bot.send_message(user_id, "❌ Щось пішло не так. Спробуйте пізніше", reply_markup=kb)
