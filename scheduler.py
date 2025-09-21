@@ -5,7 +5,15 @@ import sqlite3
 from dotenv import load_dotenv
 from pathlib import Path
 from aiogram import Bot, types
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import (
+    ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    InlineQuery,
+    InlineQueryResultArticle,
+    InputTextMessageContent
+)
 
 env_path = Path(__file__).parent / ".env"
 load_dotenv(dotenv_path=env_path)
