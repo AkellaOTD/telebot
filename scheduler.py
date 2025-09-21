@@ -7,12 +7,8 @@ from pathlib import Path
 from aiogram import Bot, types
 from aiogram.types import (
     ReplyKeyboardMarkup,
-    ReplyKeyboardRemove,
     InlineKeyboardMarkup,
     InlineKeyboardButton,
-    InlineQuery,
-    InlineQueryResultArticle,
-    InputTextMessageContent
 )
 
 env_path = Path(__file__).parent / ".env"
@@ -23,13 +19,13 @@ PUBLISH_CHAT_ID = int(os.getenv("PUBLISH_CHAT_ID"))
 DB_PATH = "bot.db"
 
 bot = Bot(token=TOKEN, parse_mode="HTML")
-
 logging.basicConfig(level=logging.INFO)
+
 
 async def autopost_once():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    # беремо одне нове оголошення
+
     cursor.execute("""
         SELECT id, user_id, username, first_name, category, district, title, description, photos, contacts
         FROM ads
@@ -42,7 +38,7 @@ async def autopost_once():
     if ad:
         ad_id, user_id, username, first_name, category, district, title, description, photos, contacts = ad
 
-        # шукаємо гілку для цієї категорії
+        # thread_id шукаємо для категорії
         cursor.execute(
             "SELECT thread_id FROM threads WHERE chat_id=? AND title=?",
             (PUBLISH_CHAT_ID, category)
@@ -102,13 +98,23 @@ async def autopost_once():
                 # позначаємо як опубліковане
                 cursor.execute("UPDATE ads SET is_published=1, is_queued=0 WHERE id=?", (ad_id,))
                 conn.commit()
-                
-                kb = ReplyKeyboardMarkup(resize_keyboard=True).add("📢 Подати оголошення","📋 Мої оголошення")
-                bot.send_message(user_id, "✅ Ваше оголошення успішно опубліковане!", reply_markup=kb)
-            finally:
-                conn.close()
-                asyncio.get_event_loop().run_until_complete(bot.session.close())
+
+                kb = ReplyKeyboardMarkup(resize_keyboard=True).add(
+                    "📢 Подати оголошення", "📋 Мої оголошення"
+                )
+                await bot.send_message(user_id, "✅ Ваше оголошення успішно опубліковане!", reply_markup=kb)
+
+            except Exception as e:
+                logging.exception(f"❌ Помилка при публікації #{ad_id}: {e}")
+
+    conn.close()            
+
+async def main():
+    try:
+        await autopost_once()
+    finally:
+        await bot.session.close()
+
 
 if __name__ == "__main__":
-    asyncio.run(autopost_once())
-    
+    asyncio.run(main())
