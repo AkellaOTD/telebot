@@ -113,7 +113,8 @@ async def main():
     try:
         await autopost_once()
     finally:
-        await bot.session.close()
+        if bot.session and not bot.session.closed:
+            await bot.session.close()
 
 
 if __name__ == "__main__":
